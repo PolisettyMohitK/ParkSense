@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "ParkSense",
+    "slug": "parksense",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#FFFFFF",
+    "splash": {
+      "backgroundColor": "#FFFFFF",
+      "resizeMode": "contain",
+      "image": "./assets/splash-icon.png"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "dev.parksense.mobile"
+    },
+    "android": {
+      "package": "dev.parksense.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#080c19",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-local-authentication",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "ParkSense uses your photos to map parking areas.",
+          "cameraPermission": "ParkSense uses the camera to capture parking areas."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#6366f1"
+        }
+      ],
+      "expo-image"
+    ],
+    "extra": {
+      "apiUrl": null,
+      "visionUrl": null
+    }
+  }
+}

@@ -1,0 +1,65 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: parking-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: parking_platform
+      MYSQL_USER: parking
+      MYSQL_PASSWORD: parking
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pparking"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/backend/Dockerfile
+    container_name: parking-backend
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:mysql://mysql:3306/parking_platform?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      DB_USERNAME: parking
+      DB_PASSWORD: parking
+      JWT_SECRET: change-me-in-production-this-should-be-a-long-random-secret-0123456789
+      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:8081
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/frontend/Dockerfile
+    container_name: parking-frontend
+    ports:
+      - "8081:80"
+    depends_on:
+      - backend
+
+  vision-service:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/vision/Dockerfile
+    container_name: parking-vision
+    environment:
+      PARKING_API_URL: http://backend:8080
+      PARKING_USER: manager@parking.dev
+      PARKING_PASSWORD: manager123
+      CAMERA_CODE: CAM-L1
+    ports:
+      - "8001:8001"
+    depends_on:
+      - backend
+
+volumes:
+  mysql-data:

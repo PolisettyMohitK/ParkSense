@@ -1,0 +1,12 @@
+**/target
+**/node_modules
+**/dist
+**/__pycache__
+**/.venv
+**/venv
+.git
+.gitignore
+docs
+.idea
+.DS_Store
+*.log

@@ -1,0 +1,15 @@
+fastapi==0.121.0
+uvicorn[standard]==0.41.0
+python-multipart==0.0.20
+numpy==2.5.3
+opencv-python-headless==5.0.0.88
+pillow==12.3.0
+httpx==0.28.1
+shapely==2.1.2
+pytest==9.0.1
+
+# Optional (not needed for the CPU survey pipeline):
+#   pycolmap, open3d        -> COLMAP pose refinement + dense fusion
+#   overpy / rasterio       -> richer map context
+#   ground-sam / torch      -> surface & obstacle labelling
+# See docs/architecture/site-survey.md

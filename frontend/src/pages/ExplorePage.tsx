@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useDeferredValue, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -9,6 +9,7 @@ import {
   Grid,
   InputAdornment,
   LinearProgress,
+  Skeleton,
   Stack,
   TextField,
   Typography,
@@ -17,7 +18,6 @@ import SearchRoundedIcon from '@mui/icons-material/SearchRounded'
 import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded'
 import { motion } from 'framer-motion'
 import PageHeader from '../components/PageHeader'
-import LoadingState from '../components/LoadingState'
 import EmptyState from '../components/EmptyState'
 import { placesApi, CATEGORY_LABEL } from '../api/places'
 import { useOccupancyStream } from '../hooks/useOccupancyStream'
@@ -37,21 +37,61 @@ const CATEGORIES: { value: PlaceCategory | 'ALL'; label: string }[] = [
   { value: 'EVENT_VENUE', label: 'Events' },
 ]
 
+const SORT_OPTIONS = [
+  { value: 'DISTANCE', label: 'Nearest' },
+  { value: 'AVAILABILITY', label: 'Most free' },
+  { value: 'RATE', label: 'Cheapest' },
+] as const
+
+type Sort = (typeof SORT_OPTIONS)[number]['value']
+
+/** Card-shaped skeletons so the grid does not jump when results arrive. */
+function PlaceCardSkeleton() {
+  return (
+    <Card sx={{ height: '100%', overflow: 'hidden' }}>
+      <Skeleton variant="rectangular" animation="wave" sx={{ height: 160 }} />
+      <Box sx={{ p: 2 }}>
+        <Skeleton width="70%" height={26} />
+        <Skeleton width="45%" height={18} />
+        <Skeleton width="85%" height={18} />
+        <Skeleton variant="rounded" width="100%" height={6} sx={{ mt: 1.5 }} />
+      </Box>
+    </Card>
+  )
+}
+
+function summaryLine(place: {
+  category?: PlaceCategory | null
+  distanceKm?: number | null
+  hourlyRate?: number | null
+}) {
+  return [
+    place.category ? CATEGORY_LABEL[place.category] : 'Parking',
+    place.distanceKm != null ? `${place.distanceKm.toFixed(2)} km` : null,
+    place.hourlyRate != null ? `₹${Number(place.hourlyRate).toFixed(0)}/hr` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
 export default function ExplorePage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const user = useAppSelector((state) => state.auth.user)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<PlaceCategory | 'ALL'>('ALL')
+  const [sort, setSort] = useState<Sort>('DISTANCE')
   const [coords] = useState(MG_ROAD)
+  // Keeps typing responsive while the list re-queries on every keystroke.
+  const deferredQuery = useDeferredValue(query)
 
   const placesQuery = useQuery({
-    queryKey: ['places', coords.latitude, coords.longitude, query, category],
+    queryKey: ['places', coords.latitude, coords.longitude, deferredQuery, category],
     queryFn: () =>
       placesApi.search({
         lat: coords.latitude,
         lng: coords.longitude,
-        q: query.trim() || undefined,
+        q: deferredQuery.trim() || undefined,
         category: category === 'ALL' ? undefined : category,
       }),
   })
@@ -60,7 +100,18 @@ export default function ExplorePage() {
     queryClient.invalidateQueries({ queryKey: ['places'] })
   })
 
-  const places = useMemo(() => placesQuery.data ?? [], [placesQuery.data])
+  const places = useMemo(() => {
+    const data = [...(placesQuery.data ?? [])]
+    if (sort === 'AVAILABILITY') {
+      data.sort((a, b) => b.availableSpaces - a.availableSpaces)
+    } else if (sort === 'RATE') {
+      data.sort((a, b) => (a.hourlyRate ?? Infinity) - (b.hourlyRate ?? Infinity))
+    }
+    return data
+  }, [placesQuery.data, sort])
+
+  const availableNearby = places.reduce((total, place) => total + place.availableSpaces, 0)
+  const searching = deferredQuery !== query
 
   return (
     <Box>
@@ -95,17 +146,59 @@ export default function ExplorePage() {
             />
           ))}
         </Stack>
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={1.5}
+          alignItems={{ xs: 'stretch', sm: 'center' }}
+          justifyContent="space-between"
+        >
+          <Typography variant="body2" color="text.secondary" aria-live="polite">
+            {placesQuery.isFetching
+              ? 'Updating availability…'
+              : `${places.length} place${places.length === 1 ? '' : 's'} · ${availableNearby} spot${
+                  availableNearby === 1 ? '' : 's'
+                } free`}
+          </Typography>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Typography variant="body2" color="text.secondary">
+              Sort
+            </Typography>
+            {SORT_OPTIONS.map((option) => (
+              <Chip
+                key={option.value}
+                label={option.label}
+                clickable
+                size="small"
+                color={sort === option.value ? 'primary' : 'default'}
+                variant={sort === option.value ? 'filled' : 'outlined'}
+                onClick={() => setSort(option.value)}
+              />
+            ))}
+          </Stack>
+        </Stack>
       </Stack>
 
       {placesQuery.isLoading ? (
-        <LoadingState minHeight={320} />
+        <Grid container spacing={2.5}>
+          {Array.from({ length: 6 }, (_, index) => (
+            <Grid item xs={12} sm={6} lg={4} key={index}>
+              <PlaceCardSkeleton />
+            </Grid>
+          ))}
+        </Grid>
       ) : places.length === 0 ? (
         <EmptyState
           title="No places found"
-          subtitle={query ? `Nothing matches “${query}”.` : 'Try another category.'}
+          subtitle={
+            query
+              ? `Nothing matches “${query}”.`
+              : category !== 'ALL'
+                ? 'No places in this category yet.'
+                : 'Try another category.'
+          }
         />
       ) : (
-        <Grid container spacing={2.5}>
+        <Grid container spacing={2.5} sx={{ opacity: searching ? 0.6 : 1, transition: 'opacity 180ms ease' }}>
           {places.map((place, index) => {
             const full = place.totalSpaces > 0 && place.availableSpaces === 0
             const rate =
@@ -115,10 +208,14 @@ export default function ExplorePage() {
                 <motion.div
                   initial={{ opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.25, delay: index * 0.03 }}
+                  transition={{ duration: 0.25, delay: Math.min(index * 0.03, 0.3) }}
+                  style={{ height: '100%' }}
                 >
                   <Card sx={{ height: '100%', overflow: 'hidden' }}>
-                    <CardActionArea onClick={() => navigate(`/places/${place.siteId}`)}>
+                    <CardActionArea
+                      onClick={() => navigate(`/places/${place.siteId}`)}
+                      sx={{ height: '100%', display: 'flex', alignItems: 'stretch' }}
+                    >
                       <Box
                         sx={{
                           height: 160,
@@ -136,27 +233,36 @@ export default function ExplorePage() {
                           sx={{ position: 'absolute', top: 12, left: 12, color: '#fff' }}
                         />
                       </Box>
-                      <Box sx={{ p: 2 }}>
+                      <Box sx={{ p: 2, flex: 1, display: 'flex', flexDirection: 'column' }}>
                         <Typography variant="h6" noWrap>
                           {place.name}
                         </Typography>
                         <Stack direction="row" spacing={1} alignItems="center" sx={{ color: 'text.secondary' }}>
                           <PlaceRoundedIcon sx={{ fontSize: 14 }} />
                           <Typography variant="body2" noWrap>
-                            {place.category ? CATEGORY_LABEL[place.category] : 'Parking'}
-                            {place.distanceKm != null ? ` · ${place.distanceKm.toFixed(2)} km` : ''}
-                            {place.hourlyRate != null ? ` · ₹${Number(place.hourlyRate).toFixed(0)}/hr` : ''}
+                            {summaryLine(place)}
                           </Typography>
                         </Stack>
-                        <Typography variant="caption" color="text.secondary" noWrap display="block" sx={{ mt: 0.5 }}>
-                          {[place.address, place.city].filter(Boolean).join(', ')}
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          noWrap
+                          display="block"
+                          sx={{ mt: 0.5 }}
+                        >
+                          {[place.address, place.city].filter(Boolean).join(', ') || 'Address not provided'}
                         </Typography>
-                        <LinearProgress
-                          variant="determinate"
-                          value={rate}
-                          sx={{ mt: 1.5, height: 6, borderRadius: 3 }}
-                          color={rate > 80 ? 'error' : rate > 55 ? 'warning' : 'success'}
-                        />
+                        <Box sx={{ mt: 'auto', pt: 1.5 }}>
+                          <LinearProgress
+                            variant="determinate"
+                            value={rate}
+                            color={rate > 80 ? 'error' : rate > 55 ? 'warning' : 'success'}
+                            aria-label={`${rate}% occupied`}
+                          />
+                          <Typography variant="caption" color="text.secondary">
+                            {rate}% occupied
+                          </Typography>
+                        </Box>
                       </Box>
                     </CardActionArea>
                   </Card>

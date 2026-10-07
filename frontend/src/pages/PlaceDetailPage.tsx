@@ -104,23 +104,86 @@ export default function PlaceDetailPage() {
 
       <Grid container spacing={3}>
         <Grid item xs={12} md={4}>
-          <Card sx={{ p: 3 }}>
-            <Typography variant="overline" color="text.secondary">
-              Availability
-            </Typography>
-            <Typography variant="h4" fontWeight={700}>
-              {summary.availableSpaces} of {summary.totalSpaces} free
-            </Typography>
-            <LinearProgress
-              variant="determinate"
-              value={rate}
-              sx={{ mt: 1.5, height: 8, borderRadius: 4 }}
-              color={rate > 80 ? 'error' : rate > 55 ? 'warning' : 'success'}
-            />
-            <Typography variant="caption" color="text.secondary">
-              {summary.occupiedSpaces} occupied · {summary.zoneCount} parking area(s)
-            </Typography>
-          </Card>
+          <Stack spacing={2}>
+            <Card sx={{ p: 3 }}>
+              <Typography variant="overline" color="text.secondary">
+                Availability now
+              </Typography>
+              <Stack direction="row" spacing={1} alignItems="baseline" sx={{ mt: 0.5 }}>
+                <Typography variant="h3" fontWeight={700} color={summary.availableSpaces === 0 ? 'error.main' : 'primary.main'}>
+                  {summary.availableSpaces}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  of {summary.totalSpaces} free
+                </Typography>
+              </Stack>
+              <LinearProgress
+                variant="determinate"
+                value={rate}
+                sx={{ mt: 1.5 }}
+                color={rate > 80 ? 'error' : rate > 55 ? 'warning' : 'success'}
+                aria-label={`${rate}% occupied`}
+              />
+              <Stack direction="row" spacing={2} sx={{ mt: 1.5 }}>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    Occupied
+                  </Typography>
+                  <Typography variant="subtitle2">{summary.occupiedSpaces}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    Areas
+                  </Typography>
+                  <Typography variant="subtitle2">{summary.zoneCount}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    Rate
+                  </Typography>
+                  <Typography variant="subtitle2">
+                    {summary.hourlyRate != null ? `₹${Number(summary.hourlyRate).toFixed(0)}/hr` : '—'}
+                  </Typography>
+                </Box>
+              </Stack>
+            </Card>
+            <Card sx={{ p: 2.5 }}>
+              <Typography variant="subtitle2" gutterBottom>
+                How booking works
+              </Typography>
+              <Stack spacing={1.25}>
+                {[
+                  'Pick a parking area with free spots.',
+                  'Choose your vehicle and a time window.',
+                  'Arrive and scan — the gate logs your entry.',
+                ].map((line, index) => (
+                  <Stack key={line} direction="row" spacing={1.25} alignItems="flex-start">
+                    <Box
+                      sx={{
+                        width: 22,
+                        height: 22,
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        bgcolor: 'primary.main',
+                        color: 'primary.contrastText',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        flexShrink: 0,
+                        mt: 0.25,
+                      }}
+                    >
+                      {index + 1}
+                    </Box>
+                    <Typography variant="body2" color="text.secondary">
+                      {line}
+                    </Typography>
+                  </Stack>
+                ))}
+              </Stack>
+            </Card>
+          </Stack>
         </Grid>
 
         <Grid item xs={12} md={8}>
@@ -141,12 +204,28 @@ export default function PlaceDetailPage() {
                     spacing={1}
                     sx={{ py: 1.5 }}
                   >
-                    <Box>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography fontWeight={600}>{zone.name}</Typography>
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography variant="caption" color="text.secondary" display="block">
                         {zone.type === 'UNSTRUCTURED' ? 'Open area' : 'Structured'}
-                        {zone.floor ? ` · ${zone.floor}` : ''} · {zone.availableSpaces} free of {zone.totalSpaces}
+                        {zone.floor ? ` · ${zone.floor}` : ''}
                       </Typography>
+                      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 1 }}>
+                        <LinearProgress
+                          variant="determinate"
+                          value={
+                            zone.totalSpaces === 0
+                              ? 0
+                              : ((zone.totalSpaces - zone.availableSpaces) / zone.totalSpaces) * 100
+                          }
+                          sx={{ maxWidth: 180, flex: 1 }}
+                          color={zone.availableSpaces === 0 ? 'error' : 'success'}
+                          aria-label={`${zone.availableSpaces} of ${zone.totalSpaces} free`}
+                        />
+                        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                          {zone.availableSpaces} free of {zone.totalSpaces}
+                        </Typography>
+                      </Stack>
                     </Box>
                     <Button
                       variant="contained"
@@ -154,7 +233,7 @@ export default function PlaceDetailPage() {
                       onClick={() => navigate(`/reservations?zoneId=${zone.id}`)}
                       disabled={zone.availableSpaces === 0}
                     >
-                      Reserve
+                      {zone.availableSpaces === 0 ? 'Full' : 'Reserve'}
                     </Button>
                   </Stack>
                 ))}

@@ -2,13 +2,16 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Alert,
   Box,
   Button,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   MenuItem,
+  Paper,
   Stack,
   Table,
   TableBody,
@@ -22,6 +25,7 @@ import {
   TextField,
   IconButton,
   Tooltip,
+  Typography,
 } from '@mui/material'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import CancelRoundedIcon from '@mui/icons-material/CancelRounded'
@@ -99,6 +103,26 @@ export default function ReservationsPage() {
     queryClient.invalidateQueries({ queryKey: ['spaces'] })
     queryClient.invalidateQueries({ queryKey: ['zones'] })
   }
+
+  /** Surfaces problems before the round-trip, so the user is not left guessing. */
+  const timeError = (() => {
+    if (!form.startTime || !form.endTime) return 'Pick a start and end time.'
+    const start = new Date(form.startTime).getTime()
+    const end = new Date(form.endTime).getTime()
+    if (Number.isNaN(start) || Number.isNaN(end)) return 'Enter a valid date and time.'
+    if (end <= start) return 'End time must be after the start time.'
+    if (start < Date.now() - 60_000) return 'Start time cannot be in the past.'
+    return null
+  })()
+
+  const hours = (() => {
+    if (timeError) return 0
+    return (new Date(form.endTime).getTime() - new Date(form.startTime).getTime()) / 3_600_000
+  })()
+
+  const selectedZone = (zonesQuery.data ?? []).find((zone) => zone.id === Number(form.zoneId))
+  const selectedVehicle = (vehiclesQuery.data ?? []).find((v) => v.id === Number(form.vehicleId))
+  const selectedSpace = (spacesQuery.data ?? []).find((s) => s.id === Number(form.assignedSpaceId))
 
   const createMutation = useMutation({
     mutationFn: (payload: ReservationForm) =>
@@ -357,7 +381,9 @@ export default function ReservationsPage() {
                 value={form.startTime}
                 onChange={(event) => setForm({ ...form, startTime: event.target.value })}
                 fullWidth
+                error={Boolean(timeError)}
                 InputLabelProps={{ shrink: true }}
+                inputProps={{ min: toLocalInput(new Date()) }}
               />
               <TextField
                 label="End"
@@ -365,9 +391,58 @@ export default function ReservationsPage() {
                 value={form.endTime}
                 onChange={(event) => setForm({ ...form, endTime: event.target.value })}
                 fullWidth
+                error={Boolean(timeError)}
                 InputLabelProps={{ shrink: true }}
               />
             </Stack>
+            {timeError ? (
+              <Alert severity="warning" onClose={() => undefined}>
+                {timeError}
+              </Alert>
+            ) : (
+              <Paper variant="outlined" sx={{ p: 2, bgcolor: 'action.hover' }}>
+                <Stack spacing={1}>
+                  <Stack direction="row" justifyContent="space-between">
+                    <Typography variant="body2" color="text.secondary">
+                      Duration
+                    </Typography>
+                    <Typography variant="body2" fontWeight={600}>
+                      {hours < 1 ? `${Math.round(hours * 60)} min` : `${hours.toFixed(1)} hrs`}
+                    </Typography>
+                  </Stack>
+                  {selectedVehicle ? (
+                    <Stack direction="row" justifyContent="space-between">
+                      <Typography variant="body2" color="text.secondary">
+                        Vehicle
+                      </Typography>
+                      <Typography variant="body2" fontWeight={600}>
+                        {selectedVehicle.plateNumber}
+                      </Typography>
+                    </Stack>
+                  ) : null}
+                  <Stack direction="row" justifyContent="space-between">
+                    <Typography variant="body2" color="text.secondary">
+                      Area
+                    </Typography>
+                    <Typography variant="body2" fontWeight={600}>
+                      {selectedZone?.name ?? '—'}
+                    </Typography>
+                  </Stack>
+                  <Stack direction="row" justifyContent="space-between">
+                    <Typography variant="body2" color="text.secondary">
+                      Space
+                    </Typography>
+                    <Typography variant="body2" fontWeight={600}>
+                      {selectedSpace?.code ?? 'Auto-assign on arrival'}
+                    </Typography>
+                  </Stack>
+                  <Divider />
+                  <Typography variant="caption" color="text.secondary">
+                    Billing is not enabled yet, so no charge is applied for this booking.
+                  </Typography>
+                </Stack>
+              </Paper>
+            )}
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -377,9 +452,15 @@ export default function ReservationsPage() {
           <Button
             variant="contained"
             onClick={() => createMutation.mutate(form)}
-            disabled={!form.userId || !form.vehicleId || !form.zoneId || createMutation.isPending}
+            disabled={
+              !form.userId ||
+              !form.vehicleId ||
+              !form.zoneId ||
+              Boolean(timeError) ||
+              createMutation.isPending
+            }
           >
-            Create
+            {createMutation.isPending ? 'Creating…' : 'Confirm booking'}
           </Button>
         </DialogActions>
       </Dialog>

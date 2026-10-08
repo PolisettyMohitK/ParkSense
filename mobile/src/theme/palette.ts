@@ -1,7 +1,8 @@
+import { lightTokens, darkTokens, spacingTokens, radiusTokens } from './tokens.generated'
+
 /**
- * Apple-style design tokens.
- * Light: white backgrounds, black text. Dark: black backgrounds, white text.
- * Colours follow the iOS system palette so the app feels native on both platforms.
+ * Apple-style monochrome design tokens with polished silver.
+ * Strictly single-sourced from design-tokens/tokens.json.
  */
 
 export interface Palette {
@@ -22,69 +23,72 @@ export interface Palette {
   successDim: string
   dangerDim: string
   warningDim: string
+  infoDim: string
   neutralDim: string
   primaryDim: string
 }
 
 export const lightColors: Palette = {
-  background: '#FFFFFF',
-  groupedBackground: '#F2F2F7',
-  surface: '#FFFFFF',
-  fill: 'rgba(120,120,128,0.12)',
-  text: '#000000',
-  textSecondary: 'rgba(60,60,67,0.60)',
-  separator: 'rgba(60,60,67,0.18)',
-  primary: '#000000',
-  onPrimary: '#FFFFFF',
-  success: '#34C759',
-  danger: '#FF3B30',
-  warning: '#FF9500',
-  info: '#007AFF',
-  overlay: 'rgba(0,0,0,0.35)',
-  successDim: 'rgba(52,199,89,0.14)',
-  dangerDim: 'rgba(255,59,48,0.14)',
-  warningDim: 'rgba(255,149,0,0.16)',
-  neutralDim: 'rgba(120,120,128,0.14)',
-  primaryDim: 'rgba(120,120,128,0.16)',
+  background: lightTokens.surface,
+  groupedBackground: lightTokens.canvas,
+  surface: lightTokens.surface,
+  fill: lightTokens.actionSelected,
+  text: lightTokens.textPrimary,
+  textSecondary: lightTokens.textSecondary,
+  separator: lightTokens.separator,
+  primary: lightTokens.primary,
+  onPrimary: lightTokens.onPrimary,
+  success: lightTokens.statusFree,
+  danger: lightTokens.statusOccupied,
+  warning: lightTokens.statusReserved,
+  info: lightTokens.statusProposed,
+  overlay: 'rgba(0,0,0,0.40)',
+  successDim: lightTokens.statusFreeDim,
+  dangerDim: lightTokens.statusOccupiedDim,
+  warningDim: lightTokens.statusReservedDim,
+  infoDim: lightTokens.statusProposedDim,
+  neutralDim: lightTokens.statusOfflineDim,
+  primaryDim: 'rgba(10,10,10,0.08)',
 }
 
 export const darkColors: Palette = {
-  background: '#000000',
-  groupedBackground: '#000000',
-  surface: '#1C1C1E',
-  fill: 'rgba(118,118,128,0.24)',
-  text: '#FFFFFF',
-  textSecondary: 'rgba(235,235,245,0.60)',
-  separator: 'rgba(84,84,88,0.55)',
-  primary: '#FFFFFF',
-  onPrimary: '#000000',
-  success: '#30D158',
-  danger: '#FF453A',
-  warning: '#FF9F0A',
-  info: '#0A84FF',
-  overlay: 'rgba(0,0,0,0.6)',
-  successDim: 'rgba(48,209,88,0.20)',
-  dangerDim: 'rgba(255,69,58,0.22)',
-  warningDim: 'rgba(255,159,10,0.22)',
-  neutralDim: 'rgba(118,118,128,0.28)',
-  primaryDim: 'rgba(118,118,128,0.30)',
+  background: darkTokens.canvas,
+  groupedBackground: darkTokens.canvas,
+  surface: darkTokens.surface,
+  fill: darkTokens.actionSelected,
+  text: darkTokens.textPrimary,
+  textSecondary: darkTokens.textSecondary,
+  separator: darkTokens.separator,
+  primary: darkTokens.primary,
+  onPrimary: darkTokens.onPrimary,
+  success: darkTokens.statusFree,
+  danger: darkTokens.statusOccupied,
+  warning: darkTokens.statusReserved,
+  info: darkTokens.statusProposed,
+  overlay: 'rgba(0,0,0,0.70)',
+  successDim: darkTokens.statusFreeDim,
+  dangerDim: darkTokens.statusOccupiedDim,
+  warningDim: darkTokens.statusReservedDim,
+  infoDim: darkTokens.statusProposedDim,
+  neutralDim: darkTokens.statusOfflineDim,
+  primaryDim: 'rgba(250,250,250,0.12)',
 }
 
 export const spacing = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 24,
-  xxl: 32,
+  xs: spacingTokens.xs,
+  sm: spacingTokens.sm,
+  md: spacingTokens.md,
+  lg: spacingTokens.lg,
+  xl: spacingTokens.xl,
+  xxl: spacingTokens.xxl,
 }
 
 export const radius = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  card: 16,
-  pill: 999,
+  sm: radiusTokens.sm,
+  md: radiusTokens.md,
+  lg: radiusTokens.lg,
+  card: radiusTokens.card,
+  pill: radiusTokens.pill,
 }
 
 export interface BadgePalette {
@@ -101,12 +105,12 @@ export function statusMaps(colors: Palette) {
     OUT_OF_SERVICE: { bg: colors.neutralDim, fg: colors.textSecondary, label: 'Out of service' },
   }
   const verification: Record<string, BadgePalette> = {
-    PROPOSED: { bg: colors.warningDim, fg: colors.warning, label: 'Proposed' },
+    PROPOSED: { bg: colors.infoDim, fg: colors.info, label: 'Proposed' },
     VERIFIED: { bg: colors.successDim, fg: colors.success, label: 'Verified' },
     REJECTED: { bg: colors.dangerDim, fg: colors.danger, label: 'Rejected' },
   }
   const reservation: Record<string, BadgePalette> = {
-    PENDING: { bg: colors.neutralDim, fg: colors.info, label: 'Pending' },
+    PENDING: { bg: colors.infoDim, fg: colors.info, label: 'Pending' },
     CONFIRMED: { bg: colors.primaryDim, fg: colors.text, label: 'Confirmed' },
     ACTIVE: { bg: colors.successDim, fg: colors.success, label: 'Active' },
     COMPLETED: { bg: colors.neutralDim, fg: colors.textSecondary, label: 'Completed' },

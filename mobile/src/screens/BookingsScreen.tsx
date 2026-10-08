@@ -4,7 +4,8 @@ import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AppButton, Badge, Card, EmptyState, Loading, Muted, Row, Screen, SegmentedControl, Title } from '../components/ui'
-import { reservationsApi, sessionsApi } from '../api/endpoints'
+import { reservationsApi, mySessionsApi } from '../api/endpoints'
+import { queryKeys } from '../api/queryKeys'
 import { apiErrorMessage } from '../api/client'
 import type { RootStackParamList } from '../navigation/types'
 import { makeStyles, useTheme } from '../theme/ThemeProvider'
@@ -20,16 +21,22 @@ export default function BookingsScreen() {
   const [tab, setTab] = useState<Tab>('upcoming')
   const [error, setError] = useState<string | null>(null)
 
-  const reservationsQuery = useQuery({ queryKey: ['reservations'], queryFn: () => reservationsApi.list() })
-  const sessionsQuery = useQuery({ queryKey: ['sessions', 'mine'], queryFn: () => sessionsApi.list() })
+  const reservationsQuery = useQuery({
+    queryKey: queryKeys.reservations.all,
+    queryFn: () => reservationsApi.list(),
+  })
+  const sessionsQuery = useQuery({
+    queryKey: queryKeys.mySessions.all,
+    queryFn: () => mySessionsApi.list(),
+  })
 
   const actionMutation = useMutation({
     mutationFn: ({ id, action }: { id: number; action: 'cancel' | 'complete' }) =>
       action === 'cancel' ? reservationsApi.cancel(id) : reservationsApi.complete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['reservations'] })
-      queryClient.invalidateQueries({ queryKey: ['sessions'] })
-      queryClient.invalidateQueries({ queryKey: ['places'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.reservations.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.mySessions.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.places.all })
     },
     onError: (err) => setError(apiErrorMessage(err)),
   })

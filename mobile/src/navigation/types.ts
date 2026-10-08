@@ -16,6 +16,8 @@ export type RootStackParamList = {
   Tabs: NavigatorScreenParams<TabParamList> | undefined
   PlaceDetail: { siteId: number }
   ZoneDetail: { zoneId: number; zoneName: string }
+  Zones: undefined
+  Map: undefined
   NewReservation: { siteId?: number; zoneId?: number } | undefined
   Reservations: undefined
   Bookings: { tab?: string } | undefined

@@ -10,7 +10,7 @@ const SPACE_STATUS: Record<string, { label: string; color: Color }> = {
 }
 
 const VERIFICATION: Record<string, { label: string; color: Color }> = {
-  PROPOSED: { label: 'Proposed', color: 'warning' },
+  PROPOSED: { label: 'Proposed', color: 'info' },
   VERIFIED: { label: 'Verified', color: 'success' },
   REJECTED: { label: 'Rejected', color: 'error' },
 }

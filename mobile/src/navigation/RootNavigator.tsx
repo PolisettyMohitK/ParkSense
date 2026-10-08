@@ -32,13 +32,13 @@ const Stack = createNativeStackNavigator<RootStackParamList>()
 const Tab = createBottomTabNavigator<TabParamList>()
 
 const TAB_ICONS: Record<keyof TabParamList, keyof typeof Ionicons.glyphMap> = {
-  Explore: 'search',
-  Home: 'grid',
-  Bookings: 'calendar',
-  Zones: 'layers',
-  Map: 'map',
-  Camera: 'camera',
-  Profile: 'person',
+  Explore: 'compass-outline',
+  Home: 'stats-chart-outline',
+  Bookings: 'calendar-outline',
+  Zones: 'layers-outline',
+  Map: 'map-outline',
+  Camera: 'camera-outline',
+  Profile: 'person-outline',
 }
 
 function Tabs() {
@@ -61,20 +61,35 @@ function Tabs() {
         ),
       })}
     >
+      <Tab.Screen
+        name="Explore"
+        component={ExploreScreen}
+        options={{ tabBarLabel: 'Explore' }}
+      />
+      <Tab.Screen
+        name="Bookings"
+        component={BookingsScreen}
+        options={{ tabBarLabel: 'Bookings' }}
+      />
       {isManager ? (
         <>
-          <Tab.Screen name="Home" component={HomeScreen} />
-          <Tab.Screen name="Zones" component={ZonesScreen} />
-          <Tab.Screen name="Map" component={MapScreen} />
-          <Tab.Screen name="Camera" component={CameraScreen} />
+          <Tab.Screen
+            name="Camera"
+            component={CameraScreen}
+            options={{ tabBarLabel: 'Camera' }}
+          />
+          <Tab.Screen
+            name="Home"
+            component={HomeScreen}
+            options={{ tabBarLabel: 'Operations' }}
+          />
         </>
-      ) : (
-        <>
-          <Tab.Screen name="Explore" component={ExploreScreen} />
-          <Tab.Screen name="Bookings" component={BookingsScreen} />
-        </>
-      )}
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+      ) : null}
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ tabBarLabel: 'Profile' }}
+      />
     </Tab.Navigator>
   )
 }
@@ -121,6 +136,8 @@ export default function RootNavigator() {
             <Stack.Screen name="PlaceDetail" component={PlaceDetailScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Bookings" component={BookingsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="ZoneDetail" component={ZoneDetailScreen} options={{ title: 'Zone' }} />
+            <Stack.Screen name="Zones" component={ZonesScreen} options={{ title: 'Zones' }} />
+            <Stack.Screen name="Map" component={MapScreen} options={{ title: 'Live Map' }} />
             <Stack.Screen name="Reservations" component={ReservationsScreen} options={{ title: 'Reservations' }} />
             <Stack.Screen
               name="NewReservation"

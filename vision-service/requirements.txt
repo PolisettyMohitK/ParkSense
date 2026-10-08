@@ -1,15 +1,16 @@
+# Core runtime for the vision service: CPU-only, no GPU or ML framework required.
+# Pinned for CPython 3.12 (see .python-version).
 fastapi==0.121.0
 uvicorn[standard]==0.41.0
 python-multipart==0.0.20
 numpy==2.5.3
-opencv-python-headless==5.0.0.88
+opencv-python-headless==5.0.0.93
 pillow==12.3.0
 httpx==0.28.1
+pydantic==2.12.4
 shapely==2.1.2
+scipy==1.18.1
+networkx==3.6.1
+trimesh==5.1.1
+overpy==0.7
 pytest==9.0.1
-
-# Optional (not needed for the CPU survey pipeline):
-#   pycolmap, open3d        -> COLMAP pose refinement + dense fusion
-#   overpy / rasterio       -> richer map context
-#   ground-sam / torch      -> surface & obstacle labelling
-# See docs/architecture/site-survey.md

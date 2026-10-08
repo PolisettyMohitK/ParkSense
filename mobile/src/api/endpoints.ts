@@ -4,6 +4,7 @@ import type {
   MonitoringDevice,
   OccupancyEvent,
   Organization,
+  MySession,
   ParkingSession,
   ParkingSite,
   ParkingSpace,
@@ -11,6 +12,8 @@ import type {
   PlaceCategory,
   PlaceDetail,
   PlaceSummary,
+  PublicSpace,
+  PublicZone,
   Reservation,
   User,
   Vehicle,
@@ -126,6 +129,15 @@ export const placesApi = {
     (await client.get<PlaceSummary[]>('/places', { params })).data,
   get: async (siteId: number, params: { lat?: number; lng?: number } = {}) =>
     (await client.get<PlaceDetail>(`/places/${siteId}`, { params })).data,
+  zones: async (siteId: number) =>
+    (await client.get<PublicZone[]>(`/places/${siteId}/zones`)).data,
+  spaces: async (siteId: number, zoneId: number) =>
+    (await client.get<PublicSpace[]>(`/places/${siteId}/zones/${zoneId}/spaces`)).data,
+}
+
+export const mySessionsApi = {
+  list: async () => (await client.get<MySession[]>('/me/sessions')).data,
+  active: async () => (await client.get<MySession | ''>('/me/sessions/active')).data,
 }
 
 export function coverUrl(path?: string | null) {

@@ -36,13 +36,7 @@ import { reservationsApi } from '../api/reservations'
 import { useOccupancyStream } from '../hooks/useOccupancyStream'
 import type { OccupancyChangedEvent } from '../types'
 import { formatDistanceToNow } from 'date-fns'
-
-const STATUS_COLORS: Record<string, string> = {
-  AVAILABLE: '#22c55e',
-  OCCUPIED: '#ef4444',
-  RESERVED: '#f59e0b',
-  OUT_OF_SERVICE: '#64748b',
-}
+import { STATUS } from '../theme'
 
 export default function DashboardPage() {
   const theme = useTheme()
@@ -99,10 +93,10 @@ export default function DashboardPage() {
 
       <Grid container spacing={2.5}>
         <Grid item xs={12} sm={6} lg={3}>
-          <StatCard label="Zones" value={zones.length} icon={<LocalParkingRoundedIcon />} accent="#6366f1" />
+          <StatCard label="Zones" value={zones.length} icon={<LocalParkingRoundedIcon />} accent={theme.palette.text.primary} />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
-          <StatCard label="Total spaces" value={stats.totalSpaces} icon={<GridViewRoundedIcon />} accent="#22d3ee" />
+          <StatCard label="Total spaces" value={stats.totalSpaces} icon={<GridViewRoundedIcon />} accent={theme.palette.text.primary} />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
           <StatCard
@@ -110,7 +104,7 @@ export default function DashboardPage() {
             value={stats.available}
             hint={`${stats.occupied} occupied`}
             icon={<CheckCircleRoundedIcon />}
-            accent="#22c55e"
+            accent={STATUS[theme.palette.mode === 'dark' ? 'dark' : 'light'].free}
           />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
@@ -118,7 +112,7 @@ export default function DashboardPage() {
             label="Active reservations"
             value={stats.activeReservations}
             icon={<EventAvailableRoundedIcon />}
-            accent="#f59e0b"
+            accent={STATUS[theme.palette.mode === 'dark' ? 'dark' : 'light'].reserved}
           />
         </Grid>
 
@@ -131,8 +125,8 @@ export default function DashboardPage() {
               <Box sx={{ height: 300 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={occupancyData} barGap={6}>
-                    <XAxis dataKey="name" stroke="#94a3b8" />
-                    <YAxis stroke="#94a3b8" allowDecimals={false} />
+                    <XAxis dataKey="name" stroke={theme.palette.text.secondary} />
+                    <YAxis stroke={theme.palette.text.secondary} allowDecimals={false} />
                     <Tooltip
                       contentStyle={{
                         background: theme.palette.background.paper,
@@ -142,8 +136,16 @@ export default function DashboardPage() {
                       }}
                     />
                     <Legend />
-                    <Bar dataKey="Occupied" fill="#ef4444" radius={[6, 6, 0, 0]} />
-                    <Bar dataKey="Available" fill="#22c55e" radius={[6, 6, 0, 0]} />
+                    <Bar
+                      dataKey="Occupied"
+                      fill={STATUS[theme.palette.mode === 'dark' ? 'dark' : 'light'].occupied}
+                      radius={[6, 6, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="Available"
+                      fill={STATUS[theme.palette.mode === 'dark' ? 'dark' : 'light'].free}
+                      radius={[6, 6, 0, 0]}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </Box>
@@ -161,9 +163,18 @@ export default function DashboardPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={statusData} dataKey="value" nameKey="name" innerRadius={62} outerRadius={100} paddingAngle={3}>
-                      {statusData.map((entry) => (
-                        <Cell key={entry.name} fill={STATUS_COLORS[entry.name] ?? '#6366f1'} />
-                      ))}
+                      {statusData.map((entry) => {
+                        const statusColors = STATUS[theme.palette.mode === 'dark' ? 'dark' : 'light']
+                        const fill =
+                          entry.name === 'AVAILABLE'
+                            ? statusColors.free
+                            : entry.name === 'OCCUPIED'
+                            ? statusColors.occupied
+                            : entry.name === 'RESERVED'
+                            ? statusColors.reserved
+                            : statusColors.offline
+                        return <Cell key={entry.name} fill={fill} />
+                      })}
                     </Pie>
                     <Tooltip
                       contentStyle={{

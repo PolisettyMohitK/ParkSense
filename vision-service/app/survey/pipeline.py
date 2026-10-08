@@ -8,7 +8,7 @@ from pathlib import Path
 from .boundary import usable_polygon
 from .bundle import SurveyBundle, average_gps
 from .context import fetch_context
-from .export import layout_geojson, ortho_png
+from .export import layout_geojson, ortho_png, terrain_glb
 from .layout import generate_layout, layout_to_local_layout
 from .profiles import get_profile
 from .reconstruct import reconstruct
@@ -142,7 +142,8 @@ def run_survey(
         (artefacts_dir / "layout.geojson").write_text(json.dumps(geojson, indent=2), encoding="utf-8")
         (artefacts_dir / "report.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
         ortho_png(ground, layout_json, artefacts_dir / "ortho.png")
-        result["artifacts"] = ["layout.geojson", "report.json", "ortho.png"]
+        terrain_glb(ground, artefacts_dir / "terrain.glb", layout_json)
+        result["artifacts"] = ["layout.geojson", "report.json", "ortho.png", "terrain.glb"]
 
     return result
 

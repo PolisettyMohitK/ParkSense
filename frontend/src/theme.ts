@@ -1,60 +1,84 @@
 import { alpha, createTheme, type Theme } from '@mui/material/styles'
+import {
+  lightTokens,
+  darkTokens,
+  spacingTokens,
+  radiusTokens,
+  typographyTokens,
+} from './theme/tokens.generated'
 
 export type ColorMode = 'light' | 'dark'
 export type AppearancePreference = 'system' | 'light' | 'dark'
 
-const SYSTEM_FONT =
-  '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
+const SYSTEM_FONT = typographyTokens.fontFamily
 
-/** Parksense brand blue. Single source of truth for accents across web + mobile. */
-export const BRAND = {
-  50: '#EAF3FF',
-  100: '#D3E6FF',
-  300: '#7FB4FF',
-  500: '#2F7BFF',
-  600: '#1F62E0',
-  700: '#1749AE',
-  light: '#4C93FF',
-  dark: '#1F62E0',
-} as const
-
-/** Shared semantic colours so status meaning never changes between themes. */
+/** Shared status tokens for canvas, charts, and SVG rendering */
 export const STATUS = {
-  free: '#34C759',
-  occupied: '#FF3B30',
-  reserved: '#FF9500',
-  offline: '#8E8E93',
-  proposed: '#AF52DE',
+  light: {
+    free: lightTokens.statusFree,
+    occupied: lightTokens.statusOccupied,
+    reserved: lightTokens.statusReserved,
+    offline: lightTokens.statusOffline,
+    proposed: lightTokens.statusProposed,
+  },
+  dark: {
+    free: darkTokens.statusFree,
+    occupied: darkTokens.statusOccupied,
+    reserved: darkTokens.statusReserved,
+    offline: darkTokens.statusOffline,
+    proposed: darkTokens.statusProposed,
+  },
 } as const
 
 export function createAppTheme(mode: ColorMode): Theme {
   const light = mode === 'light'
-  const surface = light ? '#FFFFFF' : '#1C1C1E'
-  const grouped = light ? '#F2F2F7' : '#000000'
-  const text = light ? '#000000' : '#FFFFFF'
-  const textSecondary = light ? 'rgba(60,60,67,0.60)' : 'rgba(235,235,245,0.60)'
-  const separator = light ? 'rgba(60,60,67,0.18)' : 'rgba(84,84,88,0.55)'
-  const primary = light ? BRAND.dark : BRAND.light
-  const onPrimary = '#FFFFFF'
-  const brandSoft = light ? alpha(BRAND.dark, 0.10) : alpha(BRAND.light, 0.16)
-  const ring = light ? alpha(BRAND.dark, 0.28) : alpha(BRAND.light, 0.42)
+  const tokens = light ? lightTokens : darkTokens
 
   return createTheme({
     palette: {
       mode,
-      primary: { main: primary, contrastText: onPrimary, light: BRAND[300], dark: BRAND[700] },
-      secondary: { main: light ? BRAND.dark : BRAND.light },
-      success: { main: light ? STATUS.free : '#30D158' },
-      warning: { main: light ? STATUS.reserved : '#FF9F0A' },
-      error: { main: light ? STATUS.occupied : '#FF453A' },
-      info: { main: primary },
-      text: { primary: text, secondary: textSecondary },
-      divider: separator,
-      background: { default: grouped, paper: surface },
-      action: { selected: brandSoft },
+      primary: {
+        main: tokens.primary,
+        contrastText: tokens.onPrimary,
+        light: light ? '#2C2C2E' : '#FFFFFF',
+        dark: light ? '#000000' : '#D1D1D6',
+      },
+      secondary: {
+        main: tokens.silver,
+        contrastText: tokens.textPrimary,
+      },
+      success: {
+        main: tokens.statusFree,
+        light: tokens.statusFreeDim,
+      },
+      warning: {
+        main: tokens.statusReserved,
+        light: tokens.statusReservedDim,
+      },
+      error: {
+        main: tokens.statusOccupied,
+        light: tokens.statusOccupiedDim,
+      },
+      info: {
+        main: tokens.statusProposed,
+        light: tokens.statusProposedDim,
+      },
+      text: {
+        primary: tokens.textPrimary,
+        secondary: tokens.textSecondary,
+      },
+      divider: tokens.separator,
+      background: {
+        default: tokens.canvas,
+        paper: tokens.surface,
+      },
+      action: {
+        hover: tokens.actionHover,
+        selected: tokens.actionSelected,
+      },
     },
-    shape: { borderRadius: 14 },
-    spacing: 4,
+    shape: { borderRadius: radiusTokens.card },
+    spacing: spacingTokens.xs,
     transitions: {
       duration: {
         shortest: 120,
@@ -72,40 +96,40 @@ export function createAppTheme(mode: ColorMode): Theme {
     },
     typography: {
       fontFamily: SYSTEM_FONT,
-      h1: { fontWeight: 700, letterSpacing: '-0.02em' },
+      h1: { fontWeight: 700, letterSpacing: '-0.025em' },
       h2: { fontWeight: 700, letterSpacing: '-0.02em' },
-      h3: { fontWeight: 700, letterSpacing: '-0.015em' },
+      h3: { fontWeight: 700, letterSpacing: '-0.018em' },
       h4: { fontWeight: 700, letterSpacing: '-0.015em' },
       h5: { fontWeight: 600, letterSpacing: '-0.01em' },
       h6: { fontWeight: 600, letterSpacing: '-0.01em' },
-      subtitle1: { fontWeight: 600 },
-      subtitle2: { fontWeight: 600, color: textSecondary },
+      subtitle1: { fontWeight: 600, letterSpacing: '-0.005em' },
+      subtitle2: { fontWeight: 600, color: tokens.textSecondary },
       button: { textTransform: 'none', fontWeight: 600, letterSpacing: '-0.01em' },
-      overline: { fontWeight: 700, letterSpacing: '0.06em', fontSize: 11, color: textSecondary },
-      body2: { color: textSecondary },
+      overline: { fontWeight: 700, letterSpacing: '0.06em', fontSize: 11, color: tokens.textSecondary },
+      body2: { color: tokens.textSecondary },
     },
     components: {
       MuiCssBaseline: {
         styleOverrides: {
           body: {
             backgroundImage: 'none',
-            backgroundColor: grouped,
-            color: text,
+            backgroundColor: tokens.canvas,
+            color: tokens.textPrimary,
             WebkitFontSmoothing: 'antialiased',
             MozOsxFontSmoothing: 'grayscale',
           },
           '*:focus-visible': {
-            outline: `2px solid ${primary}`,
+            outline: `2px solid ${tokens.primary}`,
             outlineOffset: 2,
           },
-          '::selection': { backgroundColor: brandSoft },
+          '::selection': { backgroundColor: tokens.silverSubtle },
         },
       },
       MuiPaper: {
         styleOverrides: {
           root: {
             backgroundImage: 'none',
-            border: light ? 'none' : `1px solid ${alpha('#ffffff', 0.08)}`,
+            border: `1px solid ${tokens.separator}`,
           },
         },
       },
@@ -113,11 +137,11 @@ export function createAppTheme(mode: ColorMode): Theme {
         defaultProps: { elevation: 0 },
         styleOverrides: {
           root: {
-            backgroundColor: surface,
+            backgroundColor: tokens.surface,
             backgroundImage: 'none',
-            border: light ? `1px solid ${alpha('#000000', 0.06)}` : `1px solid ${alpha('#ffffff', 0.08)}`,
-            boxShadow: light ? '0 1px 2px rgba(0,0,0,0.04)' : 'none',
-            transition: 'box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1), transform 180ms cubic-bezier(0.16, 1, 0.3, 1)',
+            border: `1px solid ${tokens.separator}`,
+            boxShadow: light ? '0 1px 3px rgba(0,0,0,0.03)' : 'none',
+            transition: 'border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease',
           },
         },
       },
@@ -126,20 +150,20 @@ export function createAppTheme(mode: ColorMode): Theme {
         styleOverrides: {
           root: {
             backgroundImage: 'none',
-            backgroundColor: light ? alpha('#FFFFFF', 0.85) : alpha('#000000', 0.8),
-            backdropFilter: 'blur(14px)',
-            WebkitBackdropFilter: 'blur(14px)',
-            borderBottom: `1px solid ${separator}`,
-            color: text,
+            backgroundColor: alpha(tokens.surface, 0.82),
+            backdropFilter: 'saturate(180%) blur(20px)',
+            WebkitBackdropFilter: 'saturate(180%) blur(20px)',
+            borderBottom: `1px solid ${tokens.separator}`,
+            color: tokens.textPrimary,
           },
         },
       },
       MuiDrawer: {
         styleOverrides: {
           paper: {
-            backgroundColor: light ? '#FFFFFF' : '#0A0A0A',
+            backgroundColor: tokens.surface,
             backgroundImage: 'none',
-            borderRight: `1px solid ${separator}`,
+            borderRight: `1px solid ${tokens.separator}`,
           },
         },
       },
@@ -147,54 +171,85 @@ export function createAppTheme(mode: ColorMode): Theme {
         defaultProps: { disableElevation: true },
         styleOverrides: {
           root: {
-            borderRadius: 12,
+            borderRadius: radiusTokens.md,
             paddingInline: 18,
             minHeight: 40,
             transition: 'transform 120ms cubic-bezier(0.16, 1, 0.3, 1), background-color 180ms ease',
             '&:active': { transform: 'scale(0.98)' },
           },
           containedPrimary: {
-            boxShadow: `0 1px 2px ${alpha(BRAND.dark, 0.24)}`,
-            '&:hover': { boxShadow: `0 4px 14px ${alpha(BRAND.dark, 0.28)}` },
+            backgroundColor: tokens.primary,
+            color: tokens.onPrimary,
+            boxShadow: 'none',
+            '&:hover': {
+              backgroundColor: light ? '#242426' : '#E5E5EA',
+              boxShadow: 'none',
+            },
           },
-          outlined: { borderColor: separator },
+          outlined: {
+            borderColor: tokens.separator,
+            color: tokens.textPrimary,
+            '&:hover': {
+              borderColor: tokens.silver,
+              backgroundColor: tokens.actionHover,
+            },
+          },
         },
       },
       MuiIconButton: {
-        styleOverrides: { root: { transition: 'background-color 180ms ease' } },
+        styleOverrides: {
+          root: {
+            color: tokens.textPrimary,
+            transition: 'background-color 180ms ease',
+            '&:hover': { backgroundColor: tokens.actionHover },
+          },
+        },
       },
       MuiTextField: {
         defaultProps: { size: 'small' },
         styleOverrides: {
           root: {
             '& .MuiOutlinedInput-root': {
-              borderRadius: 12,
-              backgroundColor: light ? alpha('#000000', 0.02) : alpha('#ffffff', 0.04),
-              transition: 'box-shadow 180ms ease, background-color 180ms ease',
-              '&.Mui-focused': { boxShadow: `0 0 0 3px ${ring}` },
+              borderRadius: radiusTokens.md,
+              backgroundColor: light ? '#FFFFFF' : tokens.silverSubtle,
+              transition: 'box-shadow 180ms ease, border-color 180ms ease',
+              '&.Mui-focused': { boxShadow: `0 0 0 3px ${tokens.ring}` },
             },
           },
         },
       },
       MuiOutlinedInput: {
-        styleOverrides: { notchedOutline: { borderColor: separator } },
+        styleOverrides: {
+          notchedOutline: { borderColor: tokens.separator },
+        },
       },
       MuiChip: {
         styleOverrides: {
-          root: { fontWeight: 600, borderRadius: 9 },
-          outlined: { borderColor: separator },
+          root: {
+            fontWeight: 600,
+            borderRadius: radiusTokens.sm,
+          },
+          outlined: { borderColor: tokens.separator },
         },
       },
       MuiTableCell: {
         styleOverrides: {
-          root: { borderColor: separator },
-          head: { fontWeight: 700, color: textSecondary, whiteSpace: 'nowrap' },
+          root: { borderColor: tokens.separator },
+          head: { fontWeight: 700, color: tokens.textSecondary, whiteSpace: 'nowrap' },
         },
       },
-      MuiTabs: { styleOverrides: { indicator: { height: 3, borderRadius: 3 } } },
+      MuiTabs: {
+        styleOverrides: {
+          indicator: { height: 2, borderRadius: 2, backgroundColor: tokens.primary },
+        },
+      },
       MuiLinearProgress: {
         styleOverrides: {
-          root: { height: 6, borderRadius: 3, backgroundColor: light ? alpha('#000000', 0.08) : alpha('#ffffff', 0.12) },
+          root: {
+            height: 6,
+            borderRadius: 3,
+            backgroundColor: light ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.10)',
+          },
           bar: { borderRadius: 3 },
         },
       },
@@ -202,20 +257,21 @@ export function createAppTheme(mode: ColorMode): Theme {
       MuiDialog: {
         styleOverrides: {
           paper: {
-            borderRadius: 18,
+            borderRadius: radiusTokens.modal,
             backgroundImage: 'none',
-            backgroundColor: surface,
+            backgroundColor: tokens.surface,
+            border: `1px solid ${tokens.separator}`,
           },
         },
       },
       MuiMenu: {
         styleOverrides: {
           paper: {
-            borderRadius: 14,
+            borderRadius: radiusTokens.card,
             backgroundImage: 'none',
-            backgroundColor: surface,
-            border: light ? `1px solid ${alpha('#000000', 0.06)}` : `1px solid ${alpha('#ffffff', 0.08)}`,
-            boxShadow: light ? '0 8px 30px rgba(0,0,0,0.10)' : '0 8px 30px rgba(0,0,0,0.55)',
+            backgroundColor: tokens.surface,
+            border: `1px solid ${tokens.separator}`,
+            boxShadow: light ? '0 10px 30px rgba(0,0,0,0.08)' : '0 10px 30px rgba(0,0,0,0.60)',
           },
         },
       },
@@ -223,12 +279,12 @@ export function createAppTheme(mode: ColorMode): Theme {
         defaultProps: { animation: 'wave' },
         styleOverrides: {
           root: {
-            backgroundColor: light ? alpha('#000000', 0.06) : alpha('#ffffff', 0.08),
-            borderRadius: 8,
+            backgroundColor: light ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.08)',
+            borderRadius: radiusTokens.sm,
           },
         },
       },
-      MuiDivider: { styleOverrides: { root: { borderColor: separator } } },
+      MuiDivider: { styleOverrides: { root: { borderColor: tokens.separator } } },
     },
   })
 }

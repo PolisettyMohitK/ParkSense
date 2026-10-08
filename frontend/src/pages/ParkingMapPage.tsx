@@ -11,6 +11,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
+import { useTheme } from '@mui/material/styles'
 import { useSnackbar } from 'notistack'
 import PageHeader from '../components/PageHeader'
 import LoadingState from '../components/LoadingState'
@@ -19,25 +20,30 @@ import { occupancyApi } from '../api/occupancy'
 import { apiErrorMessage } from '../api/client'
 import { useOccupancyStream } from '../hooks/useOccupancyStream'
 import type { SpaceStatus } from '../types'
+import { designTokens } from '../theme/tokens.generated'
 
 const SPACE_W = 84
 const SPACE_H = 104
 
-const FILL: Record<SpaceStatus, string> = {
-  AVAILABLE: 'rgba(34,197,94,0.22)',
-  OCCUPIED: 'rgba(239,68,68,0.28)',
-  RESERVED: 'rgba(245,158,11,0.26)',
-  OUT_OF_SERVICE: 'rgba(100,116,139,0.28)',
-}
-
-const BORDER: Record<SpaceStatus, string> = {
-  AVAILABLE: '#22c55e',
-  OCCUPIED: '#ef4444',
-  RESERVED: '#f59e0b',
-  OUT_OF_SERVICE: '#64748b',
-}
-
 export default function ParkingMapPage() {
+  const theme = useTheme()
+  const isDark = theme.palette.mode === 'dark'
+  const tokens = isDark ? designTokens.color.dark : designTokens.color.light
+
+  const fillMap: Record<SpaceStatus, string> = {
+    AVAILABLE: tokens.statusFreeDim,
+    OCCUPIED: tokens.statusOccupiedDim,
+    RESERVED: tokens.statusReservedDim,
+    OUT_OF_SERVICE: tokens.statusOfflineDim,
+  }
+
+  const borderMap: Record<SpaceStatus, string> = {
+    AVAILABLE: tokens.statusFree,
+    OCCUPIED: tokens.statusOccupied,
+    RESERVED: tokens.statusReserved,
+    OUT_OF_SERVICE: tokens.statusOffline,
+  }
+
   const queryClient = useQueryClient()
   const { enqueueSnackbar } = useSnackbar()
   const [zoneId, setZoneId] = useState<number | ''>('')
@@ -96,7 +102,7 @@ export default function ParkingMapPage() {
       <Stack direction="row" spacing={2} sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
         {(['AVAILABLE', 'OCCUPIED', 'RESERVED', 'OUT_OF_SERVICE'] as SpaceStatus[]).map((status) => (
           <Stack key={status} direction="row" spacing={1} alignItems="center">
-            <Box sx={{ width: 14, height: 14, borderRadius: 0.5, bgcolor: FILL[status], border: `2px solid ${BORDER[status]}` }} />
+            <Box sx={{ width: 14, height: 14, borderRadius: 0.5, bgcolor: fillMap[status], border: `2px solid ${borderMap[status]}` }} />
             <Typography variant="caption" color="text.secondary">
               {status.replaceAll('_', ' ')}
             </Typography>
@@ -115,10 +121,11 @@ export default function ParkingMapPage() {
                 width: canvas.width,
                 height: canvas.height,
                 borderRadius: 2,
-                backgroundImage:
-                  'linear-gradient(rgba(128,128,128,0.18) 1px, transparent 1px), linear-gradient(90deg, rgba(128,128,128,0.18) 1px, transparent 1px)',
+                backgroundImage: isDark
+                  ? 'linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)'
+                  : 'linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px)',
                 backgroundSize: '28px 28px',
-                border: '1px dashed rgba(128,128,128,0.35)',
+                border: `1px dashed ${theme.palette.divider}`,
               }}
             >
               {spaces.map((space) => (
@@ -143,8 +150,8 @@ export default function ParkingMapPage() {
                       width: SPACE_W,
                       height: SPACE_H,
                       borderRadius: 1.5,
-                      bgcolor: FILL[space.status],
-                      border: `2px solid ${BORDER[space.status]}`,
+                      bgcolor: fillMap[space.status],
+                      border: `2px solid ${borderMap[space.status]}`,
                       display: 'grid',
                       placeItems: 'center',
                       cursor: space.status === 'OUT_OF_SERVICE' ? 'not-allowed' : 'pointer',

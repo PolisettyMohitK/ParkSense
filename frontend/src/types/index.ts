@@ -285,3 +285,39 @@ export interface OccupancyChangedEvent {
   source: EventSource
   occurredAt: string
 }
+
+export interface PublicZone {
+  id: number
+  siteId: number
+  name: string
+  code: string
+  type: ZoneType
+  totalCapacity: number
+  occupiedCount: number
+  availableCount: number
+}
+
+export interface PublicSpace {
+  id: number
+  code: string
+  label?: string | null
+  status: SpaceStatus
+  positionX?: number | null
+  positionY?: number | null
+  polygon?: string | null
+}
+
+export interface MySession {
+  id: number
+  code: string
+  spaceId?: number | null
+  spaceCode?: string | null
+  zoneId?: number | null
+  zoneName?: string | null
+  vehicleId?: number | null
+  plateNumber?: string | null
+  status: SessionStatus
+  checkInAt: string
+  checkOutAt?: string | null
+  durationMinutes?: number | null
+}

@@ -2,6 +2,8 @@ package com.parking.platform.controller;
 
 import com.parking.platform.dto.response.PlaceDetailResponse;
 import com.parking.platform.dto.response.PlaceSummaryResponse;
+import com.parking.platform.dto.response.PublicSpaceResponse;
+import com.parking.platform.dto.response.PublicZoneResponse;
 import com.parking.platform.entity.enums.PlaceCategory;
 import com.parking.platform.service.PlaceService;
 import lombok.RequiredArgsConstructor;
@@ -36,5 +38,15 @@ public class PlaceController {
             @RequestParam(required = false) Double lat,
             @RequestParam(required = false) Double lng) {
         return service.detail(siteId, lat, lng);
+    }
+
+    @GetMapping("/{siteId}/zones")
+    public List<PublicZoneResponse> zones(@PathVariable Long siteId) {
+        return service.findPublicZones(siteId);
+    }
+
+    @GetMapping("/{siteId}/zones/{zoneId}/spaces")
+    public List<PublicSpaceResponse> spaces(@PathVariable Long siteId, @PathVariable Long zoneId) {
+        return service.findPublicSpaces(siteId, zoneId);
     }
 }

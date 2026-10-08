@@ -31,17 +31,20 @@ import LoadingState from '../components/LoadingState'
 import { analyticsApi } from '../api/analytics'
 import { zonesApi } from '../api/parking'
 import { useTheme } from '@mui/material/styles'
+import { STATUS } from '../theme'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-function heatColor(value: number, max: number) {
-  if (value === 0 || max === 0) return 'rgba(128,128,128,0.14)'
-  const intensity = 0.18 + (value / max) * 0.72
-  return `rgba(99,102,241,${intensity.toFixed(2)})`
+function heatColor(value: number, max: number, isDark: boolean) {
+  if (value === 0 || max === 0) return isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'
+  const intensity = (0.12 + (value / max) * 0.76).toFixed(2)
+  return isDark ? `rgba(250,250,250,${intensity})` : `rgba(10,10,10,${intensity})`
 }
 
 export default function AnalyticsPage() {
   const theme = useTheme()
+  const isDark = theme.palette.mode === 'dark'
+  const statusColors = STATUS[isDark ? 'dark' : 'light']
   const [zoneId, setZoneId] = useState<number | ''>('')
 
   const zonesQuery = useQuery({ queryKey: ['zones'], queryFn: () => zonesApi.list() })
@@ -104,7 +107,7 @@ export default function AnalyticsPage() {
             value={`${Math.round((summary?.utilizationRate ?? 0) * 100)}%`}
             hint={`${summary?.occupied ?? 0} of ${summary?.spaces ?? 0} spaces`}
             icon={<PercentRoundedIcon />}
-            accent="#6366f1"
+            accent={theme.palette.text.primary}
           />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
@@ -112,7 +115,7 @@ export default function AnalyticsPage() {
             label="Occupancy events"
             value={summary?.occupancyEvents ?? 0}
             icon={<BoltRoundedIcon />}
-            accent="#22d3ee"
+            accent={theme.palette.text.primary}
           />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
@@ -123,7 +126,7 @@ export default function AnalyticsPage() {
               Math.round(summary?.averageSessionMinutes ?? 0)
             } min`}
             icon={<InsightsRoundedIcon />}
-            accent="#f59e0b"
+            accent={statusColors.reserved}
           />
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
@@ -132,7 +135,7 @@ export default function AnalyticsPage() {
             value={summary?.devices ?? 0}
             hint={`${summary?.zones ?? 0} zones`}
             icon={<GridViewRoundedIcon />}
-            accent="#22c55e"
+            accent={theme.palette.text.primary}
           />
         </Grid>
       </Grid>
@@ -152,12 +155,12 @@ export default function AnalyticsPage() {
                     <AreaChart data={utilizationChart}>
                       <defs>
                         <linearGradient id="occupied" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.5} />
-                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                          <stop offset="5%" stopColor={statusColors.occupied} stopOpacity={0.4} />
+                          <stop offset="95%" stopColor={statusColors.occupied} stopOpacity={0} />
                         </linearGradient>
                         <linearGradient id="vacant" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#22c55e" stopOpacity={0.5} />
-                          <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                          <stop offset="5%" stopColor={statusColors.free} stopOpacity={0.4} />
+                          <stop offset="95%" stopColor={statusColors.free} stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
@@ -174,14 +177,14 @@ export default function AnalyticsPage() {
                       <Area
                         type="monotone"
                         dataKey="Occupied"
-                        stroke="#ef4444"
+                        stroke={statusColors.occupied}
                         fill="url(#occupied)"
                         strokeWidth={2}
                       />
                       <Area
                         type="monotone"
                         dataKey="Vacant"
-                        stroke="#22c55e"
+                        stroke={statusColors.free}
                         fill="url(#vacant)"
                         strokeWidth={2}
                       />
@@ -230,7 +233,7 @@ export default function AnalyticsPage() {
                                 width: 26,
                                 height: 26,
                                 borderRadius: 0.75,
-                                bgcolor: heatColor(value, maxHeat),
+                                bgcolor: heatColor(value, maxHeat, isDark),
                                 border: `1px solid ${theme.palette.divider}`,
                               }}
                             />

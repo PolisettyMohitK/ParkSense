@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link as RouterLink } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Box,
@@ -22,6 +23,7 @@ import {
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
+import ViewInArRoundedIcon from '@mui/icons-material/ViewInArRounded'
 import { useSnackbar } from 'notistack'
 import PageHeader from '../components/PageHeader'
 import LoadingState from '../components/LoadingState'
@@ -156,6 +158,11 @@ export default function SitesPage() {
                       : '—'}
                   </TableCell>
                   <TableCell align="right">
+                    <Tooltip title="2.5D Surveys">
+                      <IconButton size="small" component={RouterLink} to={`/admin/sites/${site.id}/surveys`}>
+                        <ViewInArRoundedIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                     <IconButton size="small" onClick={() => edit(site)}>
                       <EditRoundedIcon fontSize="small" />
                     </IconButton>

@@ -10,22 +10,14 @@ interface StatCardProps {
   hint?: string
 }
 
-export default function StatCard({ label, value, icon, accent = '#6366f1', hint }: StatCardProps) {
+export default function StatCard({ label, value, icon, accent, hint }: StatCardProps) {
   return (
-    <motion.div whileHover={{ y: -4 }} transition={{ type: 'spring', stiffness: 300, damping: 22 }}>
+    <motion.div whileHover={{ y: -3 }} transition={{ type: 'spring', stiffness: 320, damping: 24 }}>
       <Card sx={{ position: 'relative', overflow: 'hidden' }}>
-        <Box
-          sx={{
-            position: 'absolute',
-            inset: 0,
-            background: `radial-gradient(140px 120px at 100% 0%, ${accent}33, transparent)`,
-            pointerEvents: 'none',
-          }}
-        />
         <CardContent>
           <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
             <Box>
-              <Typography variant="overline" color="text.secondary" letterSpacing={1}>
+              <Typography variant="overline" color="text.secondary" letterSpacing={0.8}>
                 {label}
               </Typography>
               <Typography variant="h4" fontWeight={700} sx={{ mt: 0.5 }}>
@@ -39,13 +31,15 @@ export default function StatCard({ label, value, icon, accent = '#6366f1', hint 
             </Box>
             <Box
               sx={{
-                width: 46,
-                height: 46,
+                width: 44,
+                height: 44,
                 borderRadius: 2.5,
                 display: 'grid',
                 placeItems: 'center',
-                color: accent,
-                bgcolor: `${accent}1f`,
+                color: accent ?? 'text.primary',
+                bgcolor: accent ? `${accent}18` : 'action.hover',
+                border: '1px solid',
+                borderColor: accent ? `${accent}33` : 'divider',
               }}
             >
               {icon}

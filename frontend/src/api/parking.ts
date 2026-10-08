@@ -47,3 +47,37 @@ export const spacesApi = {
     (await client.patch<ParkingSpace>(`/parking/spaces/${id}/operational-state`, null, { params: { state } })).data,
   remove: async (id: number) => client.delete(`/parking/spaces/${id}`),
 }
+
+export interface SiteSurvey {
+  id: number
+  siteId: number
+  siteName: string
+  surveyJobId: string
+  profile: string
+  status: string
+  imported: boolean
+  importedSpaceCount?: number | null
+  importedAt?: string | null
+  layoutJson?: string | null
+  reportJson?: string | null
+  createdAt: string
+}
+
+export interface SurveyImportResult {
+  surveyId: number
+  zoneId: number
+  zoneName: string
+  spacesCreated: number
+}
+
+export const surveysApi = {
+  listBySite: async (siteId: number) =>
+    (await client.get<SiteSurvey[]>(`/parking/sites/${siteId}/surveys`)).data,
+  get: async (siteId: number, surveyId: number) =>
+    (await client.get<SiteSurvey>(`/parking/sites/${siteId}/surveys/${surveyId}`)).data,
+  create: async (siteId: number, payload: { surveyJobId: string; profile: string; layoutJson?: string; reportJson?: string }) =>
+    (await client.post<SiteSurvey>(`/parking/sites/${siteId}/surveys`, payload)).data,
+  importSpaces: async (siteId: number, surveyId: number) =>
+    (await client.post<SurveyImportResult>(`/parking/sites/${siteId}/surveys/${surveyId}/import`)).data,
+}
+

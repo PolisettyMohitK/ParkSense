@@ -1,10 +1,13 @@
 package com.parking.platform.service;
 
+import com.parking.platform.dto.response.MySessionResponse;
 import com.parking.platform.dto.response.ParkingSessionResponse;
 import com.parking.platform.entity.ParkingSession;
 import com.parking.platform.entity.ParkingSpace;
+import com.parking.platform.entity.ParkingZone;
 import com.parking.platform.entity.Reservation;
 import com.parking.platform.entity.User;
+import com.parking.platform.entity.Vehicle;
 import com.parking.platform.entity.enums.EventSource;
 import com.parking.platform.entity.enums.ReservationStatus;
 import com.parking.platform.entity.enums.SessionStatus;
@@ -12,6 +15,7 @@ import com.parking.platform.exception.ResourceNotFoundException;
 import com.parking.platform.mapper.ParkingSessionMapper;
 import com.parking.platform.repository.ParkingSessionRepository;
 import com.parking.platform.repository.ReservationRepository;
+import com.parking.platform.security.SecurityUtils;
 import com.parking.platform.util.CodeGenerator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -117,6 +121,47 @@ public class ParkingSessionService {
         return repository.findFirstBySpaceIdAndStatusOrderByCheckInAtDesc(spaceId, SessionStatus.ACTIVE)
                 .map(mapper::toResponse)
                 .orElse(null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MySessionResponse> findMySessions() {
+        Long userId = SecurityUtils.currentUserId();
+        if (userId == null) {
+            return List.of();
+        }
+        return repository.findAllByUserIdOrderByCheckInAtDesc(userId).stream()
+                .map(this::toMySessionResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<MySessionResponse> findMyActiveSession() {
+        Long userId = SecurityUtils.currentUserId();
+        if (userId == null) {
+            return Optional.empty();
+        }
+        return repository.findFirstByUserIdAndStatusOrderByCheckInAtDesc(userId, SessionStatus.ACTIVE)
+                .map(this::toMySessionResponse);
+    }
+
+    private MySessionResponse toMySessionResponse(ParkingSession session) {
+        ParkingSpace space = session.getSpace();
+        ParkingZone zone = space != null ? space.getZone() : null;
+        Vehicle vehicle = session.getVehicle();
+        return new MySessionResponse(
+                session.getId(),
+                session.getCode(),
+                space != null ? space.getId() : null,
+                space != null ? space.getCode() : null,
+                zone != null ? zone.getId() : null,
+                zone != null ? zone.getName() : null,
+                vehicle != null ? vehicle.getId() : null,
+                vehicle != null ? vehicle.getPlateNumber() : null,
+                session.getStatus(),
+                session.getCheckInAt(),
+                session.getCheckOutAt(),
+                session.getDurationMinutes()
+        );
     }
 
     public ParkingSession getEntity(Long id) {

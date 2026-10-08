@@ -361,10 +361,12 @@ export function EmptyState({
   title,
   subtitle,
   icon = 'file-tray-outline',
+  action,
 }: {
   title: string
   subtitle?: string
   icon?: keyof typeof Ionicons.glyphMap
+  action?: { label: string; onPress: () => void }
 }) {
   const { colors } = useTheme()
   const s = styles(colors)
@@ -373,6 +375,11 @@ export function EmptyState({
       <Ionicons name={icon} size={40} color={colors.textSecondary} />
       <Text style={s.emptyTitle}>{title}</Text>
       {subtitle ? <Text style={s.emptySubtitle}>{subtitle}</Text> : null}
+      {action ? (
+        <View style={{ marginTop: 12 }}>
+          <AppButton label={action.label} onPress={action.onPress} variant="outline" />
+        </View>
+      ) : null}
     </View>
   )
 }

@@ -15,11 +15,12 @@ services (a USER can only touch their own data).
 | Organizations — write | yes | no | no |
 | Users — list | all users | all users | self only |
 | Users — create/update/delete | yes | no | no |
-| Sites / Zones / Spaces — read | yes | yes | yes |
-| Sites / Zones / Spaces — write | yes | yes | no |
-| Devices | yes | yes | no |
-| Sessions | all | all | own only |
-| Analytics | yes | yes | no |
+| Parking Admin (`/api/parking/**`) — CRUD | yes | yes | no |
+| Places Marketplace (`/api/places/**`) — read | yes | yes | yes |
+| Devices (`/api/devices/**`) | yes | yes | no |
+| Staff Sessions (`/api/sessions/**`) | yes | yes | no |
+| Driver Personal Sessions (`/api/me/sessions`) | yes | yes | own only |
+| Analytics (`/api/analytics/**`) | yes | yes | no |
 | Occupancy events — `POST /events` | yes | yes | no |
 | Reservations — list | all | all | own only |
 | Reservations — create / cancel / complete | any | any | own only |
@@ -110,12 +111,31 @@ occupancy events and cannot be written directly.
 Recording `OCCUPIED` opens a `ParkingSession` (linking an active reservation when the space
 was reserved); recording `VACANT` closes it and completes the reservation.
 
-## Sessions — `/api/sessions`
+## Places Marketplace — `/api/places`
+Public and driver-accessible discovery endpoints for sites, zones, and verified parking spaces.
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `?lat=&lng=&q=&category=&limit=` | bearer | Proximity/text search for places (sites) |
+| GET | `/{siteId}?lat=&lng=` | bearer | Detail for a place (summary, amenities, zones) |
+| GET | `/{siteId}/zones` | bearer | Public zones for a place (capacities, available counts) |
+| GET | `/{siteId}/zones/{zoneId}/spaces` | bearer | Public spaces for a zone (sanitized: code, status, coords, polygon) |
+
+## Driver Sessions — `/api/me/sessions`
+Driver-scoped personal session endpoints (USER, MANAGER, ADMIN).
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `` | bearer | List personal sessions for current user (newest first) |
+| GET | `/active` | bearer | Active session for current user (204 if none) |
+
+## Staff Sessions — `/api/sessions`
+Staff-only operations (ADMIN and MANAGER). USER role receives `403 Forbidden`.
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `?status=ACTIVE\|COMPLETED&spaceId=` | List sessions (ADMIN/MANAGER see all; other roles see only their own) |
-| GET | `/{id}` | Get session |
+| GET | `?status=ACTIVE\|COMPLETED&spaceId=` | List sessions across all users/spaces |
+| GET | `/{id}` | Get session by ID |
 | GET | `/spaces/{spaceId}/active` | Active session for a space (204 if none) |
 
 ## Reservations — `/api/reservations`

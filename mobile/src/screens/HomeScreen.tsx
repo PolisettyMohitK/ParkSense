@@ -105,8 +105,8 @@ export default function HomeScreen() {
           hint="Propose slots or detect occupancy from a photo"
           onPress={() => navigation.navigate('Tabs', { screen: 'Camera' })}
         />
-        <ListRow label="Zones" hint="Spaces, verification and occupancy" onPress={() => navigation.navigate('Tabs', { screen: 'Zones' })} />
-        <ListRow label="Live map" hint="Spatial view of every zone" onPress={() => navigation.navigate('Tabs', { screen: 'Map' })} last />
+        <ListRow label="Zones" hint="Spaces, verification and occupancy" onPress={() => navigation.navigate('Zones')} />
+        <ListRow label="Live map" hint="Spatial view of every zone" onPress={() => navigation.navigate('Map')} last />
       </ListSection>
 
       <ListSection title="Live activity">

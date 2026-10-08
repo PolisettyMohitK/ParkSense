@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import * as SecureStore from 'expo-secure-store'
 import * as LocalAuthentication from 'expo-local-authentication'
 import { authApi } from '../api/endpoints'
+import { queryClient } from '../api/queryClient'
 import { BIOMETRIC_KEY, TOKEN_KEY, USER_KEY, onUnauthorized, setAuthToken } from '../api/client'
 import type { User } from '../types'
 
@@ -82,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const logout = useCallback(async () => {
+    queryClient.clear()
     setAuthToken(null)
     setToken(null)
     setUser(null)

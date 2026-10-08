@@ -52,18 +52,34 @@ export function disconnectSocket() {
   emitStatus()
 }
 
-export function useOccupancyStream(handler: Handler) {
+export function useOccupancyStream(handler: Handler, options?: { debounceMs?: number }) {
   const handlerRef = useRef(handler)
   handlerRef.current = handler
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const debounceMs = options?.debounceMs ?? 0
 
   useEffect(() => {
     connectSocket()
-    const wrapped: Handler = (event) => handlerRef.current(event)
+    const wrapped: Handler = (event) => {
+      if (debounceMs > 0) {
+        if (timerRef.current) {
+          clearTimeout(timerRef.current)
+        }
+        timerRef.current = setTimeout(() => {
+          handlerRef.current(event)
+        }, debounceMs)
+      } else {
+        handlerRef.current(event)
+      }
+    }
     handlers.add(wrapped)
     return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+      }
       handlers.delete(wrapped)
     }
-  }, [])
+  }, [debounceMs])
 }
 
 export function useSocketStatus() {

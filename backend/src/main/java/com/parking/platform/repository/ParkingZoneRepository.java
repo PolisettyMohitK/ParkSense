@@ -11,6 +11,10 @@ public interface ParkingZoneRepository extends JpaRepository<ParkingZone, Long> 
 
     List<ParkingZone> findAllBySiteId(Long siteId);
 
+    List<ParkingZone> findAllBySiteIdAndActiveTrue(Long siteId);
+
+    Optional<ParkingZone> findByIdAndActiveTrue(Long id);
+
     List<ParkingZone> findAllBySiteIdAndType(Long siteId, ZoneType type);
 
     Optional<ParkingZone> findBySiteIdAndCode(Long siteId, String code);

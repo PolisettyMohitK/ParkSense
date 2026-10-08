@@ -13,6 +13,8 @@ public interface ParkingSpaceRepository extends JpaRepository<ParkingSpace, Long
 
     List<ParkingSpace> findAllByZoneId(Long zoneId);
 
+    List<ParkingSpace> findAllByZoneIdAndActiveTrueAndVerificationStatus(Long zoneId, VerificationStatus verificationStatus);
+
     List<ParkingSpace> findAllByZoneIdAndOccupancyState(Long zoneId, OccupancyState occupancyState);
 
     List<ParkingSpace> findAllByZoneIdAndVerificationStatus(Long zoneId, VerificationStatus verificationStatus);

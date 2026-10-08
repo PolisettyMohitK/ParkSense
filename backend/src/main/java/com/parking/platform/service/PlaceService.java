@@ -3,9 +3,15 @@ package com.parking.platform.service;
 import com.parking.platform.dto.response.ParkingZoneResponse;
 import com.parking.platform.dto.response.PlaceDetailResponse;
 import com.parking.platform.dto.response.PlaceSummaryResponse;
+import com.parking.platform.dto.response.PublicSpaceResponse;
+import com.parking.platform.dto.response.PublicZoneResponse;
 import com.parking.platform.entity.ParkingSite;
+import com.parking.platform.entity.ParkingSpace;
+import com.parking.platform.entity.ParkingZone;
 import com.parking.platform.entity.enums.OccupancyState;
+import com.parking.platform.entity.enums.OperationalState;
 import com.parking.platform.entity.enums.PlaceCategory;
+import com.parking.platform.entity.enums.VerificationStatus;
 import com.parking.platform.exception.ResourceNotFoundException;
 import com.parking.platform.repository.ParkingSpaceRepository;
 import com.parking.platform.repository.ParkingSiteRepository;
@@ -79,6 +85,58 @@ public class PlaceService {
                 site.getOrganization() == null ? null : site.getOrganization().getContactEmail(),
                 site.getOrganization() == null ? null : site.getOrganization().getContactPhone(),
                 zones);
+    }
+
+    @Transactional(readOnly = true)
+    public List<PublicZoneResponse> findPublicZones(Long siteId) {
+        ParkingSite site = siteRepository.findByIdAndActiveTrue(siteId)
+                .orElseThrow(() -> ResourceNotFoundException.of("ParkingSite", siteId));
+        List<ParkingZone> zones = zoneRepository.findAllBySiteIdAndActiveTrue(site.getId());
+        return zones.stream().map(this::toPublicZone).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<PublicSpaceResponse> findPublicSpaces(Long siteId, Long zoneId) {
+        ParkingSite site = siteRepository.findByIdAndActiveTrue(siteId)
+                .orElseThrow(() -> ResourceNotFoundException.of("ParkingSite", siteId));
+        ParkingZone zone = zoneRepository.findByIdAndActiveTrue(zoneId)
+                .filter(z -> z.getSite() != null && z.getSite().getId().equals(site.getId()))
+                .orElseThrow(() -> ResourceNotFoundException.of("ParkingZone", zoneId));
+
+        List<ParkingSpace> spaces = spaceRepository.findAllByZoneIdAndActiveTrueAndVerificationStatus(
+                zone.getId(), VerificationStatus.VERIFIED);
+        return spaces.stream().map(this::toPublicSpace).toList();
+    }
+
+    private PublicZoneResponse toPublicZone(ParkingZone zone) {
+        long total = spaceRepository.countByZoneId(zone.getId());
+        long occupied = spaceRepository.countByZoneIdAndOccupancyState(zone.getId(), OccupancyState.OCCUPIED);
+        long reserved = spaceRepository.countByZoneIdAndReservedTrue(zone.getId());
+        long outOfService = spaceRepository.countByZoneIdAndOperationalStateNot(zone.getId(), OperationalState.IN_SERVICE);
+        long available = Math.max(0, total - occupied - reserved - outOfService);
+        return new PublicZoneResponse(
+                zone.getId(),
+                zone.getSite().getId(),
+                zone.getName(),
+                zone.getCode(),
+                zone.getType(),
+                zone.getFloor(),
+                zone.getDescription(),
+                total,
+                occupied,
+                available,
+                reserved);
+    }
+
+    private PublicSpaceResponse toPublicSpace(ParkingSpace space) {
+        return new PublicSpaceResponse(
+                space.getId(),
+                space.getCode(),
+                space.getLabel(),
+                space.getStatus(),
+                space.getPositionX(),
+                space.getPositionY(),
+                space.getPolygon());
     }
 
     private boolean matches(ParkingSite site, String needle) {

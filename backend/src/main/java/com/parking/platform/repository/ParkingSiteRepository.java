@@ -15,6 +15,8 @@ public interface ParkingSiteRepository extends JpaRepository<ParkingSite, Long> 
 
     List<ParkingSite> findAllByActiveTrue();
 
+    Optional<ParkingSite> findByIdAndActiveTrue(Long id);
+
     Optional<ParkingSite> findByOrganizationIdAndCode(Long organizationId, String code);
 
     boolean existsByOrganizationIdAndCode(Long organizationId, String code);

@@ -17,7 +17,8 @@ import {
   SearchBar,
   Title,
 } from '../components/ui'
-import { coverUrl, placesApi, reservationsApi, sessionsApi } from '../api/endpoints'
+import { coverUrl, placesApi, reservationsApi, mySessionsApi } from '../api/endpoints'
+import { queryKeys } from '../api/queryKeys'
 import { useAuth } from '../store/AuthContext'
 import { useUserLocation } from '../hooks/useUserLocation'
 import { useOccupancyStream } from '../hooks/useOccupancyStream'
@@ -61,7 +62,12 @@ export default function ExploreScreen() {
   const [category, setCategory] = useState<PlaceCategory | 'ALL'>('ALL')
 
   const placesQuery = useQuery({
-    queryKey: ['places', location.latitude, location.longitude, query, category],
+    queryKey: queryKeys.places.list({
+      lat: location.latitude,
+      lng: location.longitude,
+      q: query.trim() || undefined,
+      category: category === 'ALL' ? undefined : category,
+    }),
     queryFn: () =>
       placesApi.search({
         lat: location.latitude,
@@ -71,12 +77,21 @@ export default function ExploreScreen() {
       }),
   })
 
-  const bookingsQuery = useQuery({ queryKey: ['reservations'], queryFn: () => reservationsApi.list() })
-  const sessionsQuery = useQuery({ queryKey: ['sessions', 'mine'], queryFn: () => sessionsApi.list() })
-
-  useOccupancyStream(() => {
-    queryClient.invalidateQueries({ queryKey: ['places'] })
+  const bookingsQuery = useQuery({
+    queryKey: queryKeys.reservations.all,
+    queryFn: () => reservationsApi.list(),
   })
+  const sessionsQuery = useQuery({
+    queryKey: queryKeys.mySessions.all,
+    queryFn: () => mySessionsApi.list(),
+  })
+
+  useOccupancyStream(
+    () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.places.all })
+    },
+    { debounceMs: 400 }
+  )
 
   const liveBooking = useMemo(() => {
     const session = (sessionsQuery.data ?? []).find((item) => item.status === 'ACTIVE')
@@ -198,7 +213,9 @@ function PlaceCard({
           <Text style={styles.placeMeta} numberOfLines={1}>
             {place.category ? CATEGORY_LABEL[place.category] : 'Parking'}
             {place.distanceKm != null ? ` · ${place.distanceKm.toFixed(2)} km` : ''}
-            {place.hourlyRate != null ? ` · ₹${Number(place.hourlyRate).toFixed(0)}/hr` : ''}
+            {place.hourlyRate != null && Number(place.hourlyRate) > 0
+              ? ` · ₹${Number(place.hourlyRate).toFixed(0)}/hr`
+              : ' · Free'}
           </Text>
           <Text style={styles.placeAddress} numberOfLines={1}>
             {[place.address, place.city].filter(Boolean).join(', ') || 'Address not set'}

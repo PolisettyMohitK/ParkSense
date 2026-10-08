@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -5,10 +6,25 @@ import { useQuery } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
-import { AppButton, Badge, EmptyState, ListRow, ListSection, Loading, Muted, Pill, Row, Title } from '../components/ui'
+import {
+  AppButton,
+  Badge,
+  ChipRow,
+  EmptyState,
+  ListRow,
+  ListSection,
+  Loading,
+  Muted,
+  Pill,
+  Row,
+  Title,
+} from '../components/ui'
+import ParkingLot25DView from '../components/ParkingLot25DView'
 import { coverUrl, placesApi } from '../api/endpoints'
+import { queryKeys } from '../api/queryKeys'
 import { useUserLocation } from '../hooks/useUserLocation'
 import { useOccupancyStream } from '../hooks/useOccupancyStream'
+import type { PublicSpace } from '../types'
 import type { RootStackParamList } from '../navigation/types'
 import { makeStyles, useTheme } from '../theme/ThemeProvider'
 import { availabilityTone, radius, spacing } from '../theme/palette'
@@ -29,16 +45,34 @@ export default function PlaceDetailScreen() {
   const location = useUserLocation()
   const { siteId } = route.params
 
+  const [activeZoneId, setActiveZoneId] = useState<number | null>(null)
+  const [selectedSpace, setSelectedSpace] = useState<PublicSpace | null>(null)
+
   const placeQuery = useQuery({
-    queryKey: ['place', siteId, location.latitude, location.longitude],
+    queryKey: queryKeys.places.detail(siteId, { lat: location.latitude, lng: location.longitude }),
     queryFn: () => placesApi.get(siteId, { lat: location.latitude, lng: location.longitude }),
   })
 
-  useOccupancyStream(() => {
-    placeQuery.refetch()
+  const { zones } = placeQuery.data ?? { zones: [] }
+  const currentZone = zones.find((z) => z.id === activeZoneId) ?? zones[0] ?? null
+
+  const spacesQuery = useQuery({
+    queryKey: ['place-spaces', siteId, currentZone?.id],
+    queryFn: () => placesApi.spaces(siteId, currentZone!.id),
+    enabled: currentZone != null,
   })
 
-  if (placeQuery.isLoading || !placeQuery.data) {
+  useOccupancyStream(
+    () => {
+      placeQuery.refetch()
+      if (currentZone != null) {
+        spacesQuery.refetch()
+      }
+    },
+    { debounceMs: 400 }
+  )
+
+  if (placeQuery.isLoading) {
     return (
       <View style={styles.loading}>
         <Loading label="Loading place…" />
@@ -46,9 +80,22 @@ export default function PlaceDetailScreen() {
     )
   }
 
-  const { summary, zones } = placeQuery.data
+  if (placeQuery.isError || !placeQuery.data) {
+    return (
+      <View style={styles.loading}>
+        <EmptyState
+          title="Failed to load place"
+          subtitle={placeQuery.error instanceof Error ? placeQuery.error.message : 'Please check your connection.'}
+          action={{ label: 'Try again', onPress: () => placeQuery.refetch() }}
+        />
+      </View>
+    )
+  }
+
+  const { summary } = placeQuery.data
   const cover = coverUrl(summary.coverImageUrl)
   const tone = availabilityTone(colors, summary.availableSpaces, summary.totalSpaces)
+  const isPaid = summary.hourlyRate != null && Number(summary.hourlyRate) > 0
 
   const openDirections = () => {
     if (summary.latitude == null || summary.longitude == null) return
@@ -85,23 +132,33 @@ export default function PlaceDetailScreen() {
             </Title>
             {summary.category ? <Pill label={summary.category.replace('_', ' ')} /> : null}
           </Row>
+
           <Muted>
             {[summary.organizationName, summary.address, summary.city].filter(Boolean).join(' · ')}
           </Muted>
-          <Row>
-            {summary.distanceKm != null ? <Badge kind="verification" value="VERIFIED" /> : null}
+
+          {/* Pricing & Proximity Tagline */}
+          <Row style={{ marginTop: 4 }}>
+            <Badge
+              kind="verification"
+              value={isPaid ? 'PROPOSED' : 'VERIFIED'}
+            />
             <Text style={styles.meta}>
-              {summary.distanceKm != null ? `${summary.distanceKm.toFixed(2)} km away` : ''}
-              {summary.hourlyRate != null ? `  ·  ₹${Number(summary.hourlyRate).toFixed(0)}/hr` : ''}
+              {summary.distanceKm != null ? `${summary.distanceKm.toFixed(2)} km away  ·  ` : ''}
+              {isPaid
+                ? `₹${Number(summary.hourlyRate).toFixed(0)}/hr`
+                : 'Free / Customer parking'}
             </Text>
           </Row>
+
           {summary.openingHours ? (
-            <Row>
+            <Row style={{ marginTop: 2 }}>
               <Ionicons name="time-outline" size={15} color={colors.textSecondary} />
               <Muted>{summary.openingHours}</Muted>
             </Row>
           ) : null}
 
+          {/* Live Availability Bar */}
           <View style={styles.availabilityCard}>
             <Row between>
               <Text style={styles.availabilityValue}>
@@ -134,7 +191,41 @@ export default function PlaceDetailScreen() {
             </Row>
           ) : null}
 
-          <ListSection title="Parking areas">
+          {/* Interactive 2.5D Parking Spots Map Section */}
+          <View style={styles.mapSectionHeader}>
+            <View>
+              <Title size={18}>Parking spots 2.5D map</Title>
+              <Muted>Live layout & occupancy state for this venue</Muted>
+            </View>
+          </View>
+
+          {/* Zone Selector Chips if multiple zones exist */}
+          {zones.length > 1 ? (
+            <View style={{ marginVertical: spacing.xs }}>
+              <ChipRow
+                options={zones.map((z) => ({
+                  value: String(z.id),
+                  label: `${z.name} (${z.availableSpaces} free)`,
+                }))}
+                value={String(currentZone?.id ?? '')}
+                onChange={(val) => {
+                  setActiveZoneId(Number(val))
+                  setSelectedSpace(null)
+                }}
+              />
+            </View>
+          ) : null}
+
+          {/* 2.5D Lot Map */}
+          <ParkingLot25DView
+            spaces={spacesQuery.data ?? []}
+            selectedSpaceId={selectedSpace?.id ?? null}
+            onSelectSpace={(space) => setSelectedSpace(space)}
+            isLoading={spacesQuery.isLoading}
+          />
+
+          {/* Area List */}
+          <ListSection title="All parking areas">
             {zones.length === 0 ? (
               <ListRow label="No areas configured" last />
             ) : (
@@ -145,9 +236,10 @@ export default function PlaceDetailScreen() {
                   hint={`${zone.type === 'UNSTRUCTURED' ? 'Open area' : 'Structured'}${zone.floor ? ` · ${zone.floor}` : ''}`}
                   value={`${zone.availableSpaces} free`}
                   last={index === zones.length - 1}
-                  onPress={() =>
-                    navigation.navigate('ZoneDetail', { zoneId: zone.id, zoneName: zone.name })
-                  }
+                  onPress={() => {
+                    setActiveZoneId(zone.id)
+                    setSelectedSpace(null)
+                  }}
                 />
               ))
             )}
@@ -155,6 +247,7 @@ export default function PlaceDetailScreen() {
         </View>
       </ScrollView>
 
+      {/* Floating Bottom Bar */}
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + spacing.md }]}>
         <AppButton
           label="Directions"
@@ -164,9 +257,18 @@ export default function PlaceDetailScreen() {
           onPress={openDirections}
         />
         <AppButton
-          label="Reserve a spot"
+          label={
+            selectedSpace != null
+              ? `Book spot ${selectedSpace.code}`
+              : 'Reserve a spot'
+          }
           style={styles.bottomHalf}
-          onPress={() => navigation.navigate('NewReservation', { siteId })}
+          onPress={() =>
+            navigation.navigate('NewReservation', {
+              siteId,
+              zoneId: currentZone?.id,
+            })
+          }
         />
       </View>
     </View>
@@ -185,37 +287,42 @@ const useStyles = makeStyles((colors) =>
       width: 36,
       height: 36,
       borderRadius: 18,
-      backgroundColor: 'rgba(0,0,0,0.45)',
+      backgroundColor: 'rgba(0,0,0,0.5)',
       alignItems: 'center',
       justifyContent: 'center',
     },
     body: { padding: spacing.lg, gap: spacing.sm },
     name: { flex: 1 },
-    meta: { color: colors.textSecondary, fontSize: 13 },
+    meta: { color: colors.textSecondary, fontSize: 13, fontWeight: '500' },
     availabilityCard: {
       backgroundColor: colors.surface,
-      borderRadius: radius.card,
-      padding: spacing.lg,
-      marginTop: spacing.sm,
+      borderRadius: radius.md,
+      padding: spacing.md,
       gap: spacing.sm,
+      borderWidth: 1,
+      borderColor: colors.separator,
+      marginTop: spacing.xs,
     },
-    availabilityValue: { color: colors.text, fontSize: 17, fontWeight: '700' },
-    availabilityTone: { fontSize: 15, fontWeight: '700' },
-    progressTrack: { height: 8, borderRadius: 4, backgroundColor: colors.fill, overflow: 'hidden' },
-    progressFill: { height: 8, borderRadius: 4 },
-    amenities: { flexWrap: 'wrap', marginTop: spacing.xs },
+    availabilityValue: { color: colors.text, fontSize: 15, fontWeight: '700' },
+    availabilityTone: { fontSize: 13, fontWeight: '700' },
+    progressTrack: { height: 6, borderRadius: 3, backgroundColor: colors.fill, overflow: 'hidden' },
+    progressFill: { height: 6, borderRadius: 3 },
+    amenities: { flexWrap: 'wrap', gap: spacing.xs, marginVertical: spacing.xs },
+    mapSectionHeader: {
+      marginTop: spacing.sm,
+      marginBottom: 2,
+    },
     bottomBar: {
       position: 'absolute',
+      bottom: 0,
       left: 0,
       right: 0,
-      bottom: 0,
+      backgroundColor: colors.surface,
+      borderTopWidth: 1,
+      borderTopColor: colors.separator,
+      padding: spacing.md,
       flexDirection: 'row',
       gap: spacing.md,
-      paddingHorizontal: spacing.lg,
-      paddingTop: spacing.md,
-      backgroundColor: colors.surface,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.separator,
     },
     bottomHalf: { flex: 1 },
   }),

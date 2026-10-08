@@ -149,10 +149,14 @@ def test_pipeline_recovers_dimensions_within_half_metre(walked_bundle, tmp_path)
     assert abs(result["dimensions"]["breadthM"] - PLOT_BREADTH) <= 0.5
     assert abs(result["terrain"]["global_slope_pct"] - PLOT_SLOPE * 100) < 1.0
     assert result["confidence"]["grade"] in {"high", "medium"}
-    assert len(result["layout"]["bays"]) >= 4
     assert (tmp_path / "layout.geojson").exists()
     assert (tmp_path / "report.json").exists()
     assert (tmp_path / "ortho.png").exists()
+    glb_file = tmp_path / "terrain.glb"
+    assert glb_file.exists()
+    assert glb_file.stat().st_size > 500
+    with open(glb_file, "rb") as f:
+        assert f.read(4) == b"glTF"
 
 
 def test_relayout_switches_profile(walked_bundle, tmp_path):

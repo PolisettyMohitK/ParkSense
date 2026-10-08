@@ -33,7 +33,7 @@ export default function RegisterPage() {
     try {
       const result = await register(form)
       dispatch(setCredentials({ token: result.token, user: result.user }))
-      navigate('/dashboard', { replace: true })
+      navigate('/', { replace: true })
     } catch (err) {
       setError(apiErrorMessage(err))
     } finally {

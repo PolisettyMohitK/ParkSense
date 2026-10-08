@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAppDispatch, useAppSelector } from './store/hooks'
 import { logout } from './store/authSlice'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -22,26 +23,29 @@ import UsersPage from './pages/UsersPage'
 import OrganizationsPage from './pages/OrganizationsPage'
 import SitesPage from './pages/SitesPage'
 import DevicesPage from './pages/DevicesPage'
+import SurveyReviewPage from './pages/SurveyReviewPage'
 
 export default function App() {
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const token = useAppSelector((state) => state.auth.token)
 
   useEffect(() => {
     const handleLogout = () => {
+      queryClient.clear()
       dispatch(logout())
       navigate('/login')
     }
     window.addEventListener('auth:logout', handleLogout)
     return () => window.removeEventListener('auth:logout', handleLogout)
-  }, [dispatch, navigate])
+  }, [dispatch, navigate, queryClient])
 
   return (
     <AnimatePresence mode="wait">
       <Routes>
-        <Route path="/login" element={token ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
-        <Route path="/register" element={token ? <Navigate to="/dashboard" replace /> : <RegisterPage />} />
+        <Route path="/login" element={token ? <Navigate to="/" replace /> : <LoginPage />} />
+        <Route path="/register" element={token ? <Navigate to="/" replace /> : <RegisterPage />} />
         <Route
           element={
             <ProtectedRoute>
@@ -95,6 +99,22 @@ export default function App() {
             element={
               <RoleRoute roles={['ADMIN', 'MANAGER']}>
                 <SitesPage />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="/admin/sites/:siteId/surveys"
+            element={
+              <RoleRoute roles={['ADMIN', 'MANAGER']}>
+                <SurveyReviewPage />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="/admin/sites/:siteId/surveys/:surveyId"
+            element={
+              <RoleRoute roles={['ADMIN', 'MANAGER']}>
+                <SurveyReviewPage />
               </RoleRoute>
             }
           />

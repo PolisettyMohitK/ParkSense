@@ -30,6 +30,8 @@ export default function ProfileScreen() {
     adminItems.push({ label: 'Organizations', onPress: () => navigation.navigate('AdminOrganizations') })
   }
   if (isManager) {
+    adminItems.push({ label: 'Zones & spaces', onPress: () => navigation.navigate('Zones') })
+    adminItems.push({ label: 'Live parking map', onPress: () => navigation.navigate('Map') })
     adminItems.push({ label: 'Parking sites', onPress: () => navigation.navigate('AdminSites') })
     adminItems.push({ label: 'Monitoring devices', onPress: () => navigation.navigate('AdminDevices') })
   }

@@ -19,12 +19,14 @@ import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded'
 import { motion } from 'framer-motion'
 import PageHeader from '../components/PageHeader'
 import EmptyState from '../components/EmptyState'
+import ErrorState from '../components/ErrorState'
 import { placesApi, CATEGORY_LABEL } from '../api/places'
+import { queryKeys } from '../api/queryKeys'
 import { useOccupancyStream } from '../hooks/useOccupancyStream'
 import { useAppSelector } from '../store/hooks'
 import type { PlaceCategory } from '../types'
 
-const MG_ROAD = { latitude: 12.9756, longitude: 77.6053 }
+const HYDERABAD_CENTER = { latitude: 17.4325, longitude: 78.4072 }
 
 const CATEGORIES: { value: PlaceCategory | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'All' },
@@ -65,10 +67,11 @@ function summaryLine(place: {
   distanceKm?: number | null
   hourlyRate?: number | null
 }) {
+  const isPaid = place.hourlyRate != null && Number(place.hourlyRate) > 0
   return [
     place.category ? CATEGORY_LABEL[place.category] : 'Parking',
     place.distanceKm != null ? `${place.distanceKm.toFixed(2)} km` : null,
-    place.hourlyRate != null ? `₹${Number(place.hourlyRate).toFixed(0)}/hr` : null,
+    isPaid ? `₹${Number(place.hourlyRate).toFixed(0)}/hr` : 'Free parking',
   ]
     .filter(Boolean)
     .join(' · ')
@@ -81,12 +84,17 @@ export default function ExplorePage() {
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<PlaceCategory | 'ALL'>('ALL')
   const [sort, setSort] = useState<Sort>('DISTANCE')
-  const [coords] = useState(MG_ROAD)
+  const [coords] = useState(HYDERABAD_CENTER)
   // Keeps typing responsive while the list re-queries on every keystroke.
   const deferredQuery = useDeferredValue(query)
 
   const placesQuery = useQuery({
-    queryKey: ['places', coords.latitude, coords.longitude, deferredQuery, category],
+    queryKey: queryKeys.places.list({
+      lat: coords.latitude,
+      lng: coords.longitude,
+      q: deferredQuery.trim() || undefined,
+      category: category === 'ALL' ? undefined : category,
+    }),
     queryFn: () =>
       placesApi.search({
         lat: coords.latitude,
@@ -96,9 +104,12 @@ export default function ExplorePage() {
       }),
   })
 
-  useOccupancyStream(() => {
-    queryClient.invalidateQueries({ queryKey: ['places'] })
-  })
+  useOccupancyStream(
+    () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.places.all })
+    },
+    { debounceMs: 400 }
+  )
 
   const places = useMemo(() => {
     const data = [...(placesQuery.data ?? [])]
@@ -186,6 +197,16 @@ export default function ExplorePage() {
             </Grid>
           ))}
         </Grid>
+      ) : placesQuery.isError ? (
+        <ErrorState
+          title="Failed to load places"
+          subtitle={
+            placesQuery.error instanceof Error
+              ? placesQuery.error.message
+              : 'Could not connect to the server. Please verify your connection.'
+          }
+          onRetry={() => placesQuery.refetch()}
+        />
       ) : places.length === 0 ? (
         <EmptyState
           title="No places found"
@@ -214,7 +235,7 @@ export default function ExplorePage() {
                   <Card sx={{ height: '100%', overflow: 'hidden' }}>
                     <CardActionArea
                       onClick={() => navigate(`/places/${place.siteId}`)}
-                      sx={{ height: '100%', display: 'flex', alignItems: 'stretch' }}
+                      sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}
                     >
                       <Box
                         sx={{

@@ -29,8 +29,8 @@ const DEMO_ACCOUNTS = [
 export default function LoginPage() {
   const theme = useTheme()
   const isDark = theme.palette.mode === 'dark'
-  const [email, setEmail] = useState('admin@parking.dev')
-  const [password, setPassword] = useState('admin123')
+  const [email, setEmail] = useState(import.meta.env.DEV ? 'admin@parking.dev' : '')
+  const [password, setPassword] = useState(import.meta.env.DEV ? 'admin123' : '')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const dispatch = useAppDispatch()
@@ -44,7 +44,8 @@ export default function LoginPage() {
     try {
       const result = await login({ email, password })
       dispatch(setCredentials({ token: result.token, user: result.user }))
-      navigate(location.state?.from ?? '/dashboard', { replace: true })
+      const fallback = result.user.role === 'USER' ? '/explore' : '/dashboard'
+      navigate(location.state?.from ?? fallback, { replace: true })
     } catch (err) {
       setError(apiErrorMessage(err))
     } finally {
@@ -66,9 +67,7 @@ export default function LoginPage() {
           flexDirection: 'column',
           justifyContent: 'space-between',
           p: 6,
-          background: isDark
-            ? 'radial-gradient(700px 500px at 20% 10%, rgba(99,102,241,0.35), transparent), radial-gradient(600px 500px at 90% 90%, rgba(34,211,238,0.28), transparent), #0a0e1a'
-            : 'radial-gradient(700px 500px at 20% 10%, rgba(99,102,241,0.12), transparent), radial-gradient(600px 500px at 90% 90%, rgba(34,211,238,0.10), transparent), #FFFFFF',
+          bgcolor: isDark ? '#111113' : '#F5F5F7',
           borderRight: '1px solid',
           borderColor: 'divider',
         }}
@@ -81,7 +80,8 @@ export default function LoginPage() {
               borderRadius: 2.5,
               display: 'grid',
               placeItems: 'center',
-              background: 'linear-gradient(135deg, #6366f1, #22d3ee)',
+              bgcolor: isDark ? '#FAFAFA' : '#0A0A0A',
+              color: isDark ? '#0A0A0A' : '#FAFAFA',
             }}
           >
             <LocalParkingRoundedIcon />
@@ -151,25 +151,29 @@ export default function LoginPage() {
               </Stack>
             </Box>
 
-            <Divider sx={{ my: 3 }}>
-              <Typography variant="caption" color="text.secondary">
-                Demo accounts
-              </Typography>
-            </Divider>
+            {import.meta.env.DEV ? (
+              <>
+                <Divider sx={{ my: 3 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Demo accounts (dev only)
+                  </Typography>
+                </Divider>
 
-            <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap" useFlexGap>
-              {DEMO_ACCOUNTS.map((account) => (
-                <Chip
-                  key={account.email}
-                  label={account.label}
-                  onClick={() => {
-                    setEmail(account.email)
-                    setPassword(account.password)
-                  }}
-                  variant="outlined"
-                />
-              ))}
-            </Stack>
+                <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap" useFlexGap>
+                  {DEMO_ACCOUNTS.map((account) => (
+                    <Chip
+                      key={account.email}
+                      label={account.label}
+                      onClick={() => {
+                        setEmail(account.email)
+                        setPassword(account.password)
+                      }}
+                      variant="outlined"
+                    />
+                  ))}
+                </Stack>
+              </>
+            ) : null}
 
             <Typography variant="body2" color="text.secondary" sx={{ mt: 3, textAlign: 'center' }}>
               No account?{' '}

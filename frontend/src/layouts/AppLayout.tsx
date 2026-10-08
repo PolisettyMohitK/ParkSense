@@ -34,7 +34,6 @@ import VideocamRoundedIcon from '@mui/icons-material/VideocamRounded'
 import PhotoCameraRoundedIcon from '@mui/icons-material/PhotoCameraRounded'
 import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded'
 import ExploreRoundedIcon from '@mui/icons-material/ExploreRounded'
-import SearchRoundedIcon from '@mui/icons-material/SearchRounded'
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded'
 import LightModeRoundedIcon from '@mui/icons-material/LightModeRounded'
@@ -42,6 +41,7 @@ import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded'
 import BrightnessAutoRoundedIcon from '@mui/icons-material/BrightnessAutoRounded'
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded'
 import { motion } from 'framer-motion'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { logout } from '../store/authSlice'
 import { disconnectSocket } from '../websocket/socket'
@@ -93,17 +93,16 @@ const STAFF_NAV: { heading: string; items: NavItem[] }[] = [
 
 const DRIVER_NAV: { heading: string; items: NavItem[] }[] = [
   {
-    heading: 'Parking',
+    heading: 'Discover',
     items: [
       { label: 'Explore', to: '/explore', icon: <ExploreRoundedIcon /> },
-      { label: 'Find parking', to: '/explore', icon: <SearchRoundedIcon /> },
     ],
   },
   {
-    heading: 'My account',
+    heading: 'My Activity',
     items: [
-      { label: 'Bookings', to: '/reservations', icon: <EventAvailableRoundedIcon /> },
-      { label: 'Vehicles', to: '/vehicles', icon: <DirectionsCarRoundedIcon /> },
+      { label: 'Bookings & Sessions', to: '/reservations', icon: <EventAvailableRoundedIcon /> },
+      { label: 'My Vehicles', to: '/vehicles', icon: <DirectionsCarRoundedIcon /> },
     ],
   },
 ]
@@ -130,8 +129,11 @@ export default function AppLayout() {
     return () => window.removeEventListener('ws:status', handleStatus)
   }, [])
 
+  const queryClient = useQueryClient()
+
   const handleLogout = () => {
     disconnectSocket()
+    queryClient.clear()
     dispatch(logout())
     navigate('/login')
   }

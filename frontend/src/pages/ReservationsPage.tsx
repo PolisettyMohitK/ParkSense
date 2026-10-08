@@ -38,7 +38,7 @@ import LoadingState from '../components/LoadingState'
 import EmptyState from '../components/EmptyState'
 import StatusChip from '../components/StatusChip'
 import { reservationsApi } from '../api/reservations'
-import { sessionsApi } from '../api/sessions'
+import { sessionsApi, mySessionsApi } from '../api/sessions'
 import { zonesApi, spacesApi } from '../api/parking'
 import { vehiclesApi, usersApi } from '../api/resources'
 import { apiErrorMessage } from '../api/client'
@@ -74,6 +74,8 @@ export default function ReservationsPage() {
   const queryClient = useQueryClient()
   const { enqueueSnackbar } = useSnackbar()
   const currentUser = useAppSelector((state) => state.auth.user)
+  const isDriver = currentUser?.role === 'USER'
+  const isStaff = currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER'
   const [dialogOpen, setDialogOpen] = useState(false)
   const [tab, setTab] = useState<'reservations' | 'sessions'>('reservations')
   const [form, setForm] = useState<ReservationForm>({ ...defaultForm, userId: currentUser?.id ?? '' })
@@ -89,7 +91,11 @@ export default function ReservationsPage() {
   }, [searchParams, setSearchParams, currentUser])
 
   const reservationsQuery = useQuery({ queryKey: ['reservations'], queryFn: () => reservationsApi.list() })
-  const usersQuery = useQuery({ queryKey: ['users'], queryFn: () => usersApi.list() })
+  const usersQuery = useQuery({
+    queryKey: ['users'],
+    queryFn: () => usersApi.list(),
+    enabled: currentUser?.role === 'ADMIN',
+  })
   const vehiclesQuery = useQuery({ queryKey: ['vehicles'], queryFn: () => vehiclesApi.list() })
   const zonesQuery = useQuery({ queryKey: ['zones'], queryFn: () => zonesApi.list() })
   const spacesQuery = useQuery({
@@ -160,7 +166,10 @@ export default function ReservationsPage() {
     onError: (error) => enqueueSnackbar(apiErrorMessage(error), { variant: 'error' }),
   })
 
-  const sessionsQuery = useQuery({ queryKey: ['sessions'], queryFn: () => sessionsApi.list() })
+  const sessionsQuery = useQuery({
+    queryKey: isDriver ? ['mySessions'] : ['sessions'],
+    queryFn: () => (isDriver ? mySessionsApi.list() : sessionsApi.list()),
+  })
 
   const reservations = reservationsQuery.data ?? []
   const sessions = sessionsQuery.data ?? []
@@ -242,15 +251,17 @@ export default function ReservationsPage() {
                         <CancelRoundedIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
-                    <Tooltip title="Delete">
-                      <IconButton
-                        size="small"
-                        color="error"
-                        onClick={() => actionMutation.mutate({ id: reservation.id, action: 'delete' })}
-                      >
-                        <DeleteOutlineRoundedIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
+                    {isStaff && (
+                      <Tooltip title="Delete">
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => actionMutation.mutate({ id: reservation.id, action: 'delete' })}
+                        >
+                          <DeleteOutlineRoundedIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -289,7 +300,7 @@ export default function ReservationsPage() {
                       {session.spaceCode ?? '—'} · {session.zoneName}
                     </TableCell>
                     <TableCell>
-                      {session.userName ?? '—'}
+                      {'userName' in session ? (session as { userName?: string }).userName ?? '—' : currentUser?.fullName ?? '—'}
                       {session.plateNumber ? ` · ${session.plateNumber}` : ''}
                     </TableCell>
                     <TableCell>{format(new Date(session.checkInAt), 'dd MMM HH:mm')}</TableCell>
@@ -317,19 +328,21 @@ export default function ReservationsPage() {
         <DialogTitle>New reservation</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField
-              select
-              label="User"
-              value={form.userId}
-              onChange={(event) => setForm({ ...form, userId: Number(event.target.value) })}
-              fullWidth
-            >
-              {(usersQuery.data ?? []).map((user) => (
-                <MenuItem key={user.id} value={user.id}>
-                  {user.fullName} ({user.email})
-                </MenuItem>
-              ))}
-            </TextField>
+            {currentUser?.role === 'ADMIN' && (
+              <TextField
+                select
+                label="User"
+                value={form.userId}
+                onChange={(event) => setForm({ ...form, userId: Number(event.target.value) })}
+                fullWidth
+              >
+                {(usersQuery.data ?? []).map((user) => (
+                  <MenuItem key={user.id} value={user.id}>
+                    {user.fullName} ({user.email})
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
             <TextField
               select
               label="Vehicle"

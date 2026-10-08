@@ -84,3 +84,34 @@ export async function visionHealth(): Promise<{ status: string; backend: string 
   const { data } = await axios.get<{ status: string; backend: string }>(`${VISION_BASE}/health`)
   return data
 }
+
+export interface SurveyProfile {
+  key: string
+  label: string
+  bay_width_m: number
+  bay_length_m: number
+  aisle_width_m: number
+  angles_deg: number[]
+  max_slope_pct: number
+}
+
+export const surveyVisionApi = {
+  profiles: async () =>
+    (await axios.get<SurveyProfile[]>(`${VISION_BASE}/survey/profiles`)).data,
+  uploadBundle: async (file: File, profile?: string) => {
+    const form = new FormData()
+    form.append('file', file)
+    if (profile) form.append('profile', profile)
+    return (await axios.post(`${VISION_BASE}/surveys`, form)).data
+  },
+  getSurvey: async (jobId: string) =>
+    (await axios.get(`${VISION_BASE}/surveys/${jobId}`)).data,
+  artifactUrl: (jobId: string, name: string) =>
+    `${VISION_BASE}/surveys/${jobId}/artifacts/${name}`,
+  relayout: async (jobId: string, profile: string) => {
+    const form = new FormData()
+    form.append('profile', profile)
+    return (await axios.post(`${VISION_BASE}/surveys/${jobId}/layout`, form)).data
+  },
+}
+

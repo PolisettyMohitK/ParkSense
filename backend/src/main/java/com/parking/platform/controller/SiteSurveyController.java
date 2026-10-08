@@ -35,6 +35,11 @@ public class SiteSurveyController {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.create(siteId, request));
     }
 
+    @GetMapping("/{surveyId}")
+    public SiteSurveyResponse findById(@PathVariable Long siteId, @PathVariable Long surveyId) {
+        return service.findById(surveyId);
+    }
+
     @PostMapping("/{surveyId}/import")
     public SurveyImportResponse importSpaces(@PathVariable Long siteId, @PathVariable Long surveyId) {
         return service.importSpaces(siteId, surveyId);

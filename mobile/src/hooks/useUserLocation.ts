@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import * as Location from 'expo-location'
 
-// Fallback: MG Road, Bengaluru — used when permission is denied or location fails.
-const FALLBACK = { latitude: 12.9756, longitude: 77.6053, label: 'MG Road, Bengaluru' }
+// Fallback: Jubilee Hills, Hyderabad — used when permission is denied or location fails.
+const FALLBACK = { latitude: 17.4325, longitude: 78.4072, label: 'Jubilee Hills, Hyderabad' }
 
 export interface UserLocation {
   latitude: number

@@ -22,8 +22,8 @@ export default function LoginScreen() {
   const styles = useStyles()
   const { colors } = useTheme()
   const { login } = useAuth()
-  const [email, setEmail] = useState(CREDENTIALS.admin.email)
-  const [password, setPassword] = useState(CREDENTIALS.admin.password)
+  const [email, setEmail] = useState(__DEV__ ? CREDENTIALS.admin.email : '')
+  const [password, setPassword] = useState(__DEV__ ? CREDENTIALS.admin.password : '')
   const [demo, setDemo] = useState<'admin' | 'manager' | 'user'>('admin')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -76,10 +76,12 @@ export default function LoginScreen() {
         <AppButton label={loading ? 'Signing in…' : 'Sign in'} onPress={submit} loading={loading} />
       </Card>
 
-      <Card>
-        <Muted>Quick demo accounts</Muted>
-        <ChipRow options={DEMO.map((item) => ({ value: item.value, label: item.label }))} value={demo} onChange={pickDemo} />
-      </Card>
+      {__DEV__ ? (
+        <Card>
+          <Muted>Quick demo accounts (dev only)</Muted>
+          <ChipRow options={DEMO.map((item) => ({ value: item.value, label: item.label }))} value={demo} onChange={pickDemo} />
+        </Card>
+      ) : null}
 
       <Text style={styles.footer}>Configurable Real-Time Parking Management & Analytics</Text>
     </Screen>

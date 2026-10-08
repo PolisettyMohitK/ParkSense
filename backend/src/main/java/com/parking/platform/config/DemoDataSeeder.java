@@ -71,8 +71,8 @@ public class DemoDataSeeder implements ApplicationRunner {
                 .name("Demo Parking Organization")
                 .code("DEMO")
                 .contactEmail("contact@demo-parking.dev")
-                .contactPhone("+91-9000000000")
-                .address("MG Road, Bengaluru")
+                .contactPhone("+91-40-4000-0000")
+                .address("Road No. 1, Banjara Hills, Hyderabad")
                 .active(true)
                 .build());
 
@@ -91,12 +91,12 @@ public class DemoDataSeeder implements ApplicationRunner {
 
         ParkingSite site = siteRepository.save(ParkingSite.builder()
                 .organization(organization)
-                .name("Central Campus")
+                .name("Banjara Hills Campus")
                 .code("SITE-1")
-                .address("100 MG Road")
-                .city("Bengaluru")
-                .latitude(12.9756)
-                .longitude(77.6053)
+                .address("Road No. 1, Banjara Hills")
+                .city("Hyderabad")
+                .latitude(17.4156)
+                .longitude(78.4353)
                 .active(true)
                 .build());
 
@@ -142,7 +142,7 @@ public class DemoDataSeeder implements ApplicationRunner {
                 .build());
 
         Vehicle car = vehicleRepository.save(Vehicle.builder()
-                .owner(driver).plateNumber("KA01AB1234").make("Toyota").model("Corolla")
+                .owner(driver).plateNumber("TS09AB1234").make("Toyota").model("Corolla")
                 .color("White").type(VehicleType.CAR).active(true).build());
 
         Instant now = Instant.now();

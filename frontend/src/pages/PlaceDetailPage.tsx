@@ -20,6 +20,7 @@ import EmptyState from '../components/EmptyState'
 import ErrorState from '../components/ErrorState'
 import { PlaceDetailSkeleton } from '../components/Skeletons'
 import ParkingLot3DViewer from '../components/ParkingLot3DViewer'
+import PlacePhotoSlideshow from '../components/PlacePhotoSlideshow'
 import { AMENITY_LABEL, CATEGORY_LABEL, placesApi } from '../api/places'
 import { queryKeys } from '../api/queryKeys'
 import { useOccupancyStream } from '../hooks/useOccupancyStream'
@@ -99,14 +100,10 @@ export default function PlaceDetailPage() {
       </Button>
 
       <Card sx={{ overflow: 'hidden', mb: 3 }}>
-        <Box
-          sx={{
-            height: { xs: 200, md: 300 },
-            backgroundImage: summary.coverImageUrl ? `url(${summary.coverImageUrl})` : undefined,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            bgcolor: 'action.hover',
-          }}
+        <PlacePhotoSlideshow
+          coverImageUrl={summary.coverImageUrl}
+          height={{ xs: 220, md: 340 }}
+          autoPlayIntervalMs={4500}
         />
         <Box sx={{ p: { xs: 2, md: 3 } }}>
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>

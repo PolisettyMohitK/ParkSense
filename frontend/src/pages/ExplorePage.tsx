@@ -8,7 +8,6 @@ import {
   Chip,
   Grid,
   InputAdornment,
-  LinearProgress,
   Skeleton,
   Stack,
   TextField,
@@ -20,6 +19,7 @@ import { motion } from 'framer-motion'
 import PageHeader from '../components/PageHeader'
 import EmptyState from '../components/EmptyState'
 import ErrorState from '../components/ErrorState'
+import PlacePhotoSlideshow from '../components/PlacePhotoSlideshow'
 import { placesApi, CATEGORY_LABEL } from '../api/places'
 import { queryKeys } from '../api/queryKeys'
 import { useOccupancyStream } from '../hooks/useOccupancyStream'
@@ -85,6 +85,7 @@ export default function ExplorePage() {
   const [category, setCategory] = useState<PlaceCategory | 'ALL'>('ALL')
   const [sort, setSort] = useState<Sort>('DISTANCE')
   const [coords] = useState(HYDERABAD_CENTER)
+  const [hoveredSiteId, setHoveredSiteId] = useState<number | null>(null)
   // Keeps typing responsive while the list re-queries on every keystroke.
   const deferredQuery = useDeferredValue(query)
 
@@ -163,25 +164,13 @@ export default function ExplorePage() {
           alignItems={{ xs: 'stretch', sm: 'center' }}
           justifyContent="space-between"
         >
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Box
-              className="stream-live-dot"
-              sx={{
-                width: 7,
-                height: 7,
-                borderRadius: '50%',
-                bgcolor: '#1A7F37',
-                boxShadow: '0 0 6px #1A7F37',
-              }}
-            />
-            <Typography variant="body2" color="text.secondary" aria-live="polite">
-              {placesQuery.isFetching
-                ? 'Updating availability…'
-                : `${places.length} place${places.length === 1 ? '' : 's'} · ${availableNearby} spot${
-                    availableNearby === 1 ? '' : 's'
-                  } free`}
-            </Typography>
-          </Stack>
+          <Typography variant="body2" color="text.secondary" aria-live="polite">
+            {placesQuery.isFetching
+              ? 'Updating availability…'
+              : `${places.length} place${places.length === 1 ? '' : 's'} · ${availableNearby} spot${
+                  availableNearby === 1 ? '' : 's'
+                } free`}
+          </Typography>
           <Stack direction="row" spacing={1} alignItems="center">
             <Typography variant="body2" color="text.secondary">
               Sort
@@ -234,83 +223,84 @@ export default function ExplorePage() {
         <Grid container spacing={2.5} sx={{ opacity: searching ? 0.6 : 1, transition: 'opacity 180ms ease' }}>
           {places.map((place, index) => {
             const full = place.totalSpaces > 0 && place.availableSpaces === 0
-            const rate =
-              place.totalSpaces === 0 ? 0 : Math.round((place.occupiedSpaces / place.totalSpaces) * 100)
+            const isHovered = hoveredSiteId === place.siteId
+
             return (
               <Grid item xs={12} sm={6} lg={4} key={place.siteId}>
                 <motion.div
                   initial={{ opacity: 0, y: 16 }}
                   animate={{ opacity: 1, y: 0 }}
-                  whileHover={{ y: -6, transition: { duration: 0.22, ease: [0.16, 1, 0.3, 1] } }}
+                  whileHover={{ y: -5, transition: { duration: 0.22, ease: [0.16, 1, 0.3, 1] } }}
                   whileTap={{ scale: 0.985 }}
-                  transition={{ duration: 0.28, delay: Math.min(index * 0.04, 0.3) }}
+                  transition={{ duration: 0.28, delay: Math.min(index * 0.035, 0.25) }}
+                  onMouseEnter={() => setHoveredSiteId(place.siteId)}
+                  onMouseLeave={() => setHoveredSiteId(null)}
                   style={{ height: '100%' }}
                 >
                   <Card
                     sx={{
                       height: '100%',
                       overflow: 'hidden',
-                      transition: 'box-shadow 0.25s ease, border-color 0.25s ease',
-                      '&:hover': {
-                        boxShadow: (t) =>
-                          t.palette.mode === 'dark'
-                            ? '0 12px 24px -8px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.1)'
-                            : '0 12px 24px -8px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.06)',
-                      },
+                      transition: 'border-color 0.25s ease, box-shadow 0.25s ease',
+                      borderColor: isHovered ? 'text.secondary' : 'divider',
+                      boxShadow: isHovered
+                        ? (t) =>
+                            t.palette.mode === 'dark'
+                              ? '0 16px 36px -8px rgba(0,0,0,0.85), 0 0 0 1px rgba(255,255,255,0.12)'
+                              : '0 16px 36px -8px rgba(0,0,0,0.14), 0 0 0 1px rgba(0,0,0,0.08)'
+                        : 'none',
                     }}
                   >
                     <CardActionArea
                       onClick={() => navigate(`/places/${place.siteId}`)}
                       sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}
                     >
-                      <Box
-                        sx={{
-                          height: 168,
-                          position: 'relative',
-                          overflow: 'hidden',
-                          bgcolor: 'action.hover',
-                        }}
-                      >
+                      <Box sx={{ position: 'relative' }}>
+                        <PlacePhotoSlideshow
+                          coverImageUrl={place.coverImageUrl}
+                          height={180}
+                          isHovered={isHovered}
+                        />
+
+                        {/* Minimal translucent silver capsule for spot status */}
                         <Box
                           sx={{
                             position: 'absolute',
-                            inset: 0,
-                            backgroundImage: place.coverImageUrl ? `url(${place.coverImageUrl})` : undefined,
-                            backgroundSize: 'cover',
-                            backgroundPosition: 'center',
-                            transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-                            '.MuiCard-root:hover &': {
-                              transform: 'scale(1.05)',
-                            },
-                          }}
-                        />
-                        <Box
-                          sx={{
-                            position: 'absolute',
-                            inset: 0,
-                            background:
-                              'linear-gradient(180deg, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.5) 100%)',
-                          }}
-                        />
-                        <Chip
-                          size="small"
-                          label={full ? 'Full' : `${place.availableSpaces} spots free`}
-                          color={full ? 'error' : 'success'}
-                          sx={{
-                            position: 'absolute',
-                            top: 12,
+                            bottom: 12,
                             left: 12,
-                            color: '#fff',
-                            fontWeight: 700,
-                            boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
+                            px: 1.25,
+                            py: 0.4,
+                            borderRadius: 99,
+                            bgcolor: 'rgba(10,10,12,0.72)',
+                            backdropFilter: 'blur(10px)',
+                            border: '1px solid rgba(255,255,255,0.16)',
+                            display: 'flex',
+                            alignItems: 'center',
                           }}
-                        />
+                        >
+                          <Typography
+                            sx={{
+                              color: '#FAFAFA',
+                              fontSize: '0.74rem',
+                              fontWeight: 600,
+                              letterSpacing: 0.2,
+                            }}
+                          >
+                            {full ? 'Occupied' : `${place.availableSpaces} spots free`}
+                          </Typography>
+                        </Box>
                       </Box>
-                      <Box sx={{ p: 2, flex: 1, display: 'flex', flexDirection: 'column' }}>
+
+                      <Box sx={{ p: 2.25, flex: 1, display: 'flex', flexDirection: 'column' }}>
                         <Typography variant="h6" noWrap fontWeight={700}>
                           {place.name}
                         </Typography>
-                        <Stack direction="row" spacing={1} alignItems="center" sx={{ color: 'text.secondary' }}>
+                        <Stack
+                          direction="row"
+                          spacing={0.75}
+                          alignItems="center"
+                          sx={{ color: 'text.secondary', mt: 0.5 }}
+                        >
                           <PlaceRoundedIcon sx={{ fontSize: 14 }} />
                           <Typography variant="body2" noWrap>
                             {summaryLine(place)}
@@ -323,17 +313,31 @@ export default function ExplorePage() {
                           display="block"
                           sx={{ mt: 0.5 }}
                         >
-                          {[place.address, place.city].filter(Boolean).join(', ') || 'Address not provided'}
+                          {[place.address, place.city].filter(Boolean).join(', ') || 'Hyderabad'}
                         </Typography>
-                        <Box sx={{ mt: 'auto', pt: 1.5 }}>
-                          <LinearProgress
-                            variant="determinate"
-                            value={rate}
-                            color={rate > 80 ? 'error' : rate > 55 ? 'warning' : 'success'}
-                            aria-label={`${rate}% occupied`}
-                          />
+
+                        <Box
+                          sx={{
+                            mt: 'auto',
+                            pt: 1.75,
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            borderTop: 1,
+                            borderColor: 'divider',
+                          }}
+                        >
                           <Typography variant="caption" color="text.secondary">
-                            {rate}% occupied
+                            {place.totalSpaces} total bays
+                          </Typography>
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              fontWeight: 600,
+                              color: full ? 'text.secondary' : 'text.primary',
+                            }}
+                          >
+                            {full ? 'Currently full' : `${place.availableSpaces} available`}
                           </Typography>
                         </Box>
                       </Box>

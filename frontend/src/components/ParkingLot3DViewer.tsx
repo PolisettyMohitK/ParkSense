@@ -476,22 +476,6 @@ export default function ParkingLot3DViewer({
                     overflow: 'visible',
                   }}
                 >
-                  {/* Overhead LED Status Beacon Puck */}
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      top: -6,
-                      width: 14,
-                      height: 5,
-                      borderRadius: 1,
-                      bgcolor: isFree ? statusTheme.free : isOccupied ? statusTheme.occupied : statusTheme.reserved,
-                      boxShadow: isFree
-                        ? `0 0 10px ${statusTheme.free}, 0 0 4px #FFFFFF`
-                        : `0 0 6px ${statusTheme.occupied}`,
-                      border: '0.5px solid rgba(255,255,255,0.8)',
-                    }}
-                  />
-
                   {/* Stall Header: Code & EV Icon */}
                   <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center">
                     <Typography
@@ -508,7 +492,7 @@ export default function ParkingLot3DViewer({
                     {isEV && <EvStationRoundedIcon sx={{ fontSize: 13, color: '#FFFFFF' }} />}
                   </Stack>
 
-                  {/* Center Content: Either Parked Vehicle or Available Indicator */}
+                  {/* Center Content: Either Parked Vehicle or Subtle Open Stall Silhouette */}
                   {isOccupied ? (
                     <ParkedVehicle3D seed={space.id} />
                   ) : (
@@ -523,35 +507,12 @@ export default function ParkingLot3DViewer({
                     >
                       <DirectionsCarFilledRoundedIcon
                         sx={{
-                          fontSize: 22,
-                          color: 'rgba(255,255,255,0.35)',
+                          fontSize: 20,
+                          color: 'rgba(255,255,255,0.25)',
                         }}
                       />
                     </Box>
                   )}
-
-                  {/* Stall Status Pill */}
-                  <Box
-                    sx={{
-                      px: 1,
-                      py: 0.25,
-                      borderRadius: 99,
-                      bgcolor: 'rgba(0,0,0,0.4)',
-                      backdropFilter: 'blur(4px)',
-                      border: '0.5px solid rgba(255,255,255,0.2)',
-                    }}
-                  >
-                    <Typography
-                      sx={{
-                        fontSize: 9,
-                        fontWeight: 800,
-                        letterSpacing: 0.5,
-                        color: isFree ? '#A3F3B7' : '#FFFFFF',
-                      }}
-                    >
-                      {isFree ? 'FREE' : isOccupied ? 'BUSY' : 'RSVD'}
-                    </Typography>
-                  </Box>
 
                   {/* Thermoplastic Stall Edge Borders */}
                   <Box

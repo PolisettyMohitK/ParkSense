@@ -3,10 +3,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Image } from 'expo-image'
 import {
   AppButton,
-  Badge,
   Card,
   CategoryChips,
   EmptyState,
@@ -17,15 +15,16 @@ import {
   SearchBar,
   Title,
 } from '../components/ui'
-import { coverUrl, placesApi, reservationsApi, mySessionsApi } from '../api/endpoints'
+import { placesApi, reservationsApi, mySessionsApi } from '../api/endpoints'
 import { queryKeys } from '../api/queryKeys'
 import { useAuth } from '../store/AuthContext'
 import { useUserLocation } from '../hooks/useUserLocation'
 import { useOccupancyStream } from '../hooks/useOccupancyStream'
+import PlacePhotoSlideshow from '../components/PlacePhotoSlideshow'
 import type { PlaceCategory, PlaceSummary } from '../types'
 import type { RootStackParamList } from '../navigation/types'
 import { makeStyles, useTheme } from '../theme/ThemeProvider'
-import { availabilityTone, radius, spacing } from '../theme/palette'
+import { radius, spacing } from '../theme/palette'
 import { formatDistanceToNow } from 'date-fns'
 
 const CATEGORIES: { value: PlaceCategory | 'ALL'; label: string }[] = [
@@ -183,8 +182,6 @@ function PlaceCard({
   onPress: () => void
 }) {
   const styles = useStyles()
-  const cover = coverUrl(place.coverImageUrl)
-  const tone = availabilityTone(colors, place.availableSpaces, place.totalSpaces)
   const isFull = place.totalSpaces > 0 && place.availableSpaces === 0
 
   return (
@@ -192,32 +189,27 @@ function PlaceCard({
       onPress={onPress}
       style={({ pressed }) => [
         {
-          transform: [{ scale: pressed ? 0.975 : 1 }],
+          transform: [{ scale: pressed ? 0.98 : 1 }],
           opacity: pressed ? 0.92 : 1,
         },
       ]}
     >
       <View style={styles.placeCard}>
-        <View>
-          {cover ? (
-            <Image source={{ uri: cover }} style={styles.cover} contentFit="cover" transition={200} />
-          ) : (
-            <View style={[styles.cover, { backgroundColor: colors.fill }]} />
-          )}
-          <View style={[styles.availability, { backgroundColor: isFull ? colors.danger : colors.success }]}>
-            <Text style={styles.availabilityText}>
-              {isFull ? 'Full' : `${place.availableSpaces} spots`}
+        <View style={styles.coverWrapper}>
+          <PlacePhotoSlideshow coverImageUrl={place.coverImageUrl} height={165} />
+
+          {/* Minimal translucent frosted capsule for status */}
+          <View style={styles.spotCapsule}>
+            <Text style={styles.spotCapsuleText}>
+              {isFull ? 'Occupied' : `${place.availableSpaces} spots free`}
             </Text>
           </View>
         </View>
 
         <View style={styles.placeBody}>
-          <Row between>
-            <Text style={styles.placeName} numberOfLines={1}>
-              {place.name}
-            </Text>
-            <Badge kind="verification" value={place.totalSpaces > 0 ? 'VERIFIED' : 'PROPOSED'} />
-          </Row>
+          <Text style={styles.placeName} numberOfLines={1}>
+            {place.name}
+          </Text>
           <Text style={styles.placeMeta} numberOfLines={1}>
             {place.category ? CATEGORY_LABEL[place.category] : 'Parking'}
             {place.distanceKm != null ? ` · ${place.distanceKm.toFixed(2)} km` : ''}
@@ -226,18 +218,19 @@ function PlaceCard({
               : ' · Free'}
           </Text>
           <Text style={styles.placeAddress} numberOfLines={1}>
-            {[place.address, place.city].filter(Boolean).join(', ') || 'Address not set'}
+            {[place.address, place.city].filter(Boolean).join(', ') || 'Hyderabad'}
           </Text>
-          <View style={styles.progressTrack}>
-            <View
+
+          <View style={styles.placeFooter}>
+            <Text style={styles.placeCapacity}>{place.totalSpaces} total bays</Text>
+            <Text
               style={[
-                styles.progressFill,
-                {
-                  width: `${place.totalSpaces === 0 ? 0 : Math.round((place.occupiedSpaces / place.totalSpaces) * 100)}%`,
-                  backgroundColor: tone,
-                },
+                styles.placeAvailability,
+                { color: isFull ? colors.textSecondary : colors.text },
               ]}
-            />
+            >
+              {isFull ? 'Currently full' : `${place.availableSpaces} available`}
+            </Text>
           </View>
         </View>
       </View>
@@ -270,28 +263,51 @@ const useStyles = makeStyles((colors) =>
       borderRadius: radius.card,
       overflow: 'hidden',
       marginBottom: spacing.md,
+      borderWidth: 1,
+      borderColor: colors.separator,
     },
-    cover: { width: '100%', height: 160 },
-    availability: {
+    coverWrapper: {
+      width: '100%',
+      height: 165,
+      position: 'relative',
+    },
+    spotCapsule: {
       position: 'absolute',
-      top: spacing.md,
-      left: spacing.md,
+      bottom: 10,
+      left: 12,
       paddingHorizontal: 10,
-      paddingVertical: 5,
+      paddingVertical: 3.5,
       borderRadius: radius.pill,
+      backgroundColor: 'rgba(10,12,14,0.72)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.16)',
     },
-    availabilityText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12 },
-    placeBody: { padding: spacing.lg, gap: 4 },
-    placeName: { color: colors.text, fontSize: 17, fontWeight: '700', flex: 1 },
-    placeMeta: { color: colors.textSecondary, fontSize: 13 },
-    placeAddress: { color: colors.textSecondary, fontSize: 12 },
-    progressTrack: {
-      height: 5,
-      borderRadius: 3,
-      backgroundColor: colors.fill,
-      overflow: 'hidden',
+    spotCapsuleText: {
+      color: '#FAFAFA',
+      fontWeight: '600',
+      fontSize: 11,
+      letterSpacing: 0.2,
+    },
+    placeBody: { padding: spacing.md, gap: 3 },
+    placeName: { color: colors.text, fontSize: 16, fontWeight: '700' },
+    placeMeta: { color: colors.textSecondary, fontSize: 12 },
+    placeAddress: { color: colors.textSecondary, fontSize: 11 },
+    placeFooter: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
       marginTop: spacing.sm,
+      paddingTop: spacing.xs,
+      borderTopWidth: 1,
+      borderTopColor: colors.separator,
     },
-    progressFill: { height: 5, borderRadius: 3 },
+    placeCapacity: {
+      color: colors.textSecondary,
+      fontSize: 11,
+    },
+    placeAvailability: {
+      fontSize: 11,
+      fontWeight: '600',
+    },
   }),
 )

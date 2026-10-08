@@ -214,17 +214,6 @@ export default function ParkingLot25DView({
                     viewMode === '2.5D' && styles.bayIsoTransform,
                   ]}
                 >
-                  {/* Suspended Glowing LED Status Beacon Puck */}
-                  <View
-                    style={[
-                      styles.beaconPuck,
-                      {
-                        backgroundColor: isAvailable ? colors.success : isOccupied ? colors.danger : colors.warning,
-                        shadowColor: isAvailable ? colors.success : colors.danger,
-                      },
-                    ]}
-                  />
-
                   {/* 2.5D Isometric Extruded Edge (volumetric depth) */}
                   {viewMode === '2.5D' ? (
                     <View
@@ -268,10 +257,7 @@ export default function ParkingLot25DView({
                         </View>
                       ) : (
                         <View style={styles.freeIndicator}>
-                          <Ionicons name="car-outline" size={14 * zoom} color="rgba(255,255,255,0.5)" />
-                          <Text style={[styles.bayStatusPill, { color: textColor }]}>
-                            {statusText}
-                          </Text>
+                          <Ionicons name="car-outline" size={14 * zoom} color="rgba(255,255,255,0.4)" />
                         </View>
                       )}
 

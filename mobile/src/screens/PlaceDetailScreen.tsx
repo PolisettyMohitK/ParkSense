@@ -4,7 +4,6 @@ import { useNavigation, useRoute, type RouteProp } from '@react-navigation/nativ
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useQuery } from '@tanstack/react-query'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 import {
   AppButton,
@@ -20,6 +19,7 @@ import {
   Title,
 } from '../components/ui'
 import ParkingLot25DView from '../components/ParkingLot25DView'
+import PlacePhotoSlideshow from '../components/PlacePhotoSlideshow'
 import { coverUrl, placesApi } from '../api/endpoints'
 import { queryKeys } from '../api/queryKeys'
 import { useUserLocation } from '../hooks/useUserLocation'
@@ -93,7 +93,6 @@ export default function PlaceDetailScreen() {
   }
 
   const { summary } = placeQuery.data
-  const cover = coverUrl(summary.coverImageUrl)
   const tone = availabilityTone(colors, summary.availableSpaces, summary.totalSpaces)
   const isPaid = summary.hourlyRate != null && Number(summary.hourlyRate) > 0
 
@@ -111,12 +110,8 @@ export default function PlaceDetailScreen() {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <View>
-          {cover ? (
-            <Image source={{ uri: cover }} style={styles.hero} contentFit="cover" transition={200} />
-          ) : (
-            <View style={[styles.hero, { backgroundColor: colors.fill }]} />
-          )}
+        <View style={{ position: 'relative' }}>
+          <PlacePhotoSlideshow coverImageUrl={summary.coverImageUrl} height={240} />
           <Pressable
             onPress={() => navigation.goBack()}
             style={[styles.back, { top: insets.top + 8 }]}

@@ -267,6 +267,7 @@ export default function PlaceDetailScreen() {
             navigation.navigate('NewReservation', {
               siteId,
               zoneId: currentZone?.id,
+              spaceId: selectedSpace?.id,
             })
           }
         />

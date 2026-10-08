@@ -4,7 +4,6 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Box,
   Button,
-  ButtonGroup,
   Card,
   Chip,
   Divider,
@@ -13,34 +12,26 @@ import {
   Stack,
   Tab,
   Tabs,
-  Tooltip,
   Typography,
 } from '@mui/material'
-import { useTheme } from '@mui/material/styles'
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded'
 import DirectionsRoundedIcon from '@mui/icons-material/DirectionsRounded'
-import EventSeatRoundedIcon from '@mui/icons-material/EventSeatRounded'
-import ViewInArRoundedIcon from '@mui/icons-material/ViewInArRounded'
-import MapRoundedIcon from '@mui/icons-material/MapRounded'
 import EmptyState from '../components/EmptyState'
 import ErrorState from '../components/ErrorState'
 import { PlaceDetailSkeleton } from '../components/Skeletons'
+import ParkingLot3DViewer from '../components/ParkingLot3DViewer'
 import { AMENITY_LABEL, CATEGORY_LABEL, placesApi } from '../api/places'
 import { queryKeys } from '../api/queryKeys'
 import { useOccupancyStream } from '../hooks/useOccupancyStream'
 import type { PublicSpace } from '../types'
-import { STATUS } from '../theme'
 
 const HYDERABAD_CENTER = { latitude: 17.4325, longitude: 78.4072 }
 
 export default function PlaceDetailPage() {
   const { siteId } = useParams()
   const navigate = useNavigate()
-  const theme = useTheme()
-  const statusTheme = theme.palette.mode === 'dark' ? STATUS.dark : STATUS.light
   const [activeZoneId, setActiveZoneId] = useState<number | null>(null)
   const [selectedSpace, setSelectedSpace] = useState<PublicSpace | null>(null)
-  const [viewMode, setViewMode] = useState<'2.5D' | '2D'>('2.5D')
 
   const placeQuery = useQuery({
     queryKey: queryKeys.places.detail(Number(siteId), { lat: HYDERABAD_CENTER.latitude, lng: HYDERABAD_CENTER.longitude }),
@@ -100,9 +91,6 @@ export default function PlaceDetailPage() {
       : null
 
   const spaces = spacesQuery.data ?? []
-  const availableCount = spaces.filter((s) => s.status === 'AVAILABLE').length
-  const occupiedCount = spaces.filter((s) => s.status === 'OCCUPIED').length
-  const reservedCount = spaces.filter((s) => s.status === 'RESERVED').length
 
   return (
     <Box>
@@ -257,40 +245,9 @@ export default function PlaceDetailPage() {
         {/* Right Column: Interactive 2.5D Map & Parking Areas */}
         <Grid item xs={12} md={8}>
           <Stack spacing={3}>
-            {/* 2.5D Parking Spots Map Card */}
-            <Card sx={{ p: 3, overflow: 'hidden' }}>
-              <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={1} sx={{ mb: 2 }}>
-                <Box>
-                  <Typography variant="h6" fontWeight={700}>
-                    Parking spots 2.5D map
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Live perspective layout for {currentZone?.name ?? 'Lot'}
-                  </Typography>
-                </Box>
-
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <ButtonGroup size="small">
-                    <Button
-                      variant={viewMode === '2.5D' ? 'contained' : 'outlined'}
-                      startIcon={<ViewInArRoundedIcon />}
-                      onClick={() => setViewMode('2.5D')}
-                    >
-                      2.5D Lot
-                    </Button>
-                    <Button
-                      variant={viewMode === '2D' ? 'contained' : 'outlined'}
-                      startIcon={<MapRoundedIcon />}
-                      onClick={() => setViewMode('2D')}
-                    >
-                      2D Plan
-                    </Button>
-                  </ButtonGroup>
-                </Stack>
-              </Stack>
-
-              {/* Zone switcher tabs if multiple zones */}
-              {zones.length > 1 ? (
+            {/* Zone Switcher Tabs if multiple zones */}
+            {zones.length > 1 ? (
+              <Card sx={{ p: 1.5 }}>
                 <Tabs
                   value={currentZone?.id ?? false}
                   onChange={(_, val) => {
@@ -298,210 +255,33 @@ export default function PlaceDetailPage() {
                     setSelectedSpace(null)
                   }}
                   variant="scrollable"
-                  sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+                  scrollButtons="auto"
                 >
                   {zones.map((z) => (
-                    <Tab key={z.id} value={z.id} label={`${z.name} (${z.availableSpaces} free)`} />
+                    <Tab
+                      key={z.id}
+                      value={z.id}
+                      label={`${z.name} (${z.availableSpaces} free)`}
+                      sx={{ fontWeight: 600 }}
+                    />
                   ))}
                 </Tabs>
-              ) : null}
+              </Card>
+            ) : null}
 
-              {/* Status Legend */}
-              <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
-                <Stack direction="row" spacing={0.75} alignItems="center">
-                  <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: statusTheme.free }} />
-                  <Typography variant="caption" fontWeight={600}>
-                    {availableCount} Available
-                  </Typography>
-                </Stack>
-                <Stack direction="row" spacing={0.75} alignItems="center">
-                  <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: statusTheme.occupied }} />
-                  <Typography variant="caption" fontWeight={600}>
-                    {occupiedCount} Occupied
-                  </Typography>
-                </Stack>
-                {reservedCount > 0 ? (
-                  <Stack direction="row" spacing={0.75} alignItems="center">
-                    <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: statusTheme.reserved }} />
-                    <Typography variant="caption" fontWeight={600}>
-                      {reservedCount} Reserved
-                    </Typography>
-                  </Stack>
-                ) : null}
-              </Stack>
-
-              {/* 2.5D Lot Canvas */}
-              <Box
-                sx={{
-                  bgcolor: (theme) => (theme.palette.mode === 'dark' ? '#141416' : '#23262B'),
-                  borderRadius: 2,
-                  p: 3,
-                  overflowX: 'auto',
-                  border: 1,
-                  borderColor: 'divider',
-                  minHeight: 280,
-                  position: 'relative',
-                }}
-              >
-                {/* Drive Aisle Strip */}
-                <Box
-                  sx={{
-                    position: 'absolute',
-                    top: '50%',
-                    left: 0,
-                    right: 0,
-                    transform: 'translateY(-50%)',
-                    height: 48,
-                    bgcolor: 'rgba(0,0,0,0.35)',
-                    borderTop: '1px dashed rgba(255,255,255,0.2)',
-                    borderBottom: '1px dashed rgba(255,255,255,0.2)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    pointerEvents: 'none',
-                    zIndex: 0,
-                  }}
-                >
-                  <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.4)', fontWeight: 700, letterSpacing: 2 }}>
-                    ◄ DRIVE AISLE · ENTRY / EXIT ►
-                  </Typography>
-                </Box>
-
-                {/* Parking Spaces Grid */}
-                {spaces.length === 0 ? (
-                  <Box sx={{ py: 6, textAlign: 'center', color: 'rgba(255,255,255,0.6)' }}>
-                    <Typography variant="body2">No spots positioned for this zone yet.</Typography>
-                  </Box>
-                ) : (
-                  <Box
-                    sx={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fill, minmax(78px, 1fr))',
-                      gap: 2.5,
-                      position: 'relative',
-                      zIndex: 1,
-                      transform: viewMode === '2.5D' ? 'perspective(700px) rotateX(24deg) skewX(-4deg)' : 'none',
-                      transformOrigin: 'top center',
-                      transition: 'transform 0.3s ease',
-                      py: 2,
-                    }}
-                  >
-                    {spaces.map((space) => {
-                      const isFree = space.status === 'AVAILABLE'
-                      const isOccupied = space.status === 'OCCUPIED'
-                      const isSelected = selectedSpace?.id === space.id
-                      const bg = isFree ? statusTheme.free : isOccupied ? statusTheme.occupied : statusTheme.reserved
-                      const edge = isFree ? '#105224' : isOccupied ? '#8C000E' : '#6F3B00'
-
-                      return (
-                        <Tooltip
-                          key={space.id}
-                          title={`${space.code ?? 'Space'} · ${isFree ? 'Available (Click to Select)' : space.status}`}
-                          arrow
-                        >
-                          <Box
-                            onClick={() => {
-                              if (isFree) setSelectedSpace(space)
-                            }}
-                            sx={{
-                              height: 104,
-                              borderRadius: 1.5,
-                              bgcolor: bg,
-                              border: isSelected ? '2.5px solid #FFFFFF' : '1px solid rgba(255,255,255,0.25)',
-                              boxShadow:
-                                viewMode === '2.5D'
-                                  ? isSelected
-                                    ? `0 8px 0 ${edge}, 0 10px 16px rgba(255,255,255,0.4)`
-                                    : `0 6px 0 ${edge}, 0 8px 12px rgba(0,0,0,0.5)`
-                                  : 'none',
-                              cursor: isFree ? 'pointer' : 'default',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              p: 1,
-                              color: '#FFFFFF',
-                              position: 'relative',
-                              transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-                              '&:hover': isFree
-                                ? {
-                                    transform: 'translateY(-3px)',
-                                  }
-                                : undefined,
-                            }}
-                          >
-                            {/* Stall Stripe */}
-                            <Box
-                              sx={{
-                                position: 'absolute',
-                                left: 4,
-                                top: 6,
-                                bottom: 6,
-                                width: 2,
-                                bgcolor: 'rgba(255,255,255,0.3)',
-                                borderRadius: 1,
-                              }}
-                            />
-                            <Typography variant="subtitle2" fontWeight={800} sx={{ letterSpacing: 0.5 }}>
-                              {space.code ?? `S${space.id}`}
-                            </Typography>
-                            <Chip
-                              size="small"
-                              label={isFree ? 'FREE' : isOccupied ? 'BUSY' : 'RSVD'}
-                              sx={{
-                                height: 16,
-                                fontSize: 9,
-                                fontWeight: 800,
-                                bgcolor: 'rgba(0,0,0,0.3)',
-                                color: '#FFFFFF',
-                              }}
-                            />
-                          </Box>
-                        </Tooltip>
-                      )
-                    })}
-                  </Box>
-                )}
-              </Box>
-
-              {/* Selection banner */}
-              {selectedSpace ? (
-                <Stack
-                  direction={{ xs: 'column', sm: 'row' }}
-                  justifyContent="space-between"
-                  alignItems={{ sm: 'center' }}
-                  spacing={1.5}
-                  sx={{
-                    mt: 2,
-                    p: 2,
-                    bgcolor: 'action.hover',
-                    borderRadius: 2,
-                    border: 1,
-                    borderColor: 'primary.main',
-                  }}
-                >
-                  <Box>
-                    <Typography variant="subtitle2" fontWeight={700}>
-                      Bay {selectedSpace.code} selected
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Ready to reserve in {currentZone?.name}
-                    </Typography>
-                  </Box>
-                  <Button
-                    variant="contained"
-                    startIcon={<EventSeatRoundedIcon />}
-                    onClick={() =>
-                      navigate(
-                        `/reservations?siteId=${siteId}&zoneId=${currentZone?.id}&spaceId=${selectedSpace.id}`
-                      )
-                    }
-                  >
-                    Reserve Bay {selectedSpace.code}
-                  </Button>
-                </Stack>
-              ) : null}
-            </Card>
+            {/* Interactive 3D Parking Lot Visualizer */}
+            <ParkingLot3DViewer
+              spaces={spaces}
+              selectedSpaceId={selectedSpace?.id ?? null}
+              onSelectSpace={(space) => {
+                setSelectedSpace(space)
+                navigate(
+                  `/reservations?siteId=${siteId}&zoneId=${currentZone?.id}&spaceId=${space.id}`
+                )
+              }}
+              isLoading={spacesQuery.isLoading}
+              zoneName={currentZone?.name ?? 'Main Lot'}
+            />
 
             {/* Parking Areas List */}
             <Card sx={{ p: 3 }}>

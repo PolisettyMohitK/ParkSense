@@ -163,13 +163,25 @@ export default function ExplorePage() {
           alignItems={{ xs: 'stretch', sm: 'center' }}
           justifyContent="space-between"
         >
-          <Typography variant="body2" color="text.secondary" aria-live="polite">
-            {placesQuery.isFetching
-              ? 'Updating availability…'
-              : `${places.length} place${places.length === 1 ? '' : 's'} · ${availableNearby} spot${
-                  availableNearby === 1 ? '' : 's'
-                } free`}
-          </Typography>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Box
+              className="stream-live-dot"
+              sx={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                bgcolor: '#1A7F37',
+                boxShadow: '0 0 6px #1A7F37',
+              }}
+            />
+            <Typography variant="body2" color="text.secondary" aria-live="polite">
+              {placesQuery.isFetching
+                ? 'Updating availability…'
+                : `${places.length} place${places.length === 1 ? '' : 's'} · ${availableNearby} spot${
+                    availableNearby === 1 ? '' : 's'
+                  } free`}
+            </Typography>
+          </Stack>
           <Stack direction="row" spacing={1} alignItems="center">
             <Typography variant="body2" color="text.secondary">
               Sort
@@ -227,35 +239,75 @@ export default function ExplorePage() {
             return (
               <Grid item xs={12} sm={6} lg={4} key={place.siteId}>
                 <motion.div
-                  initial={{ opacity: 0, y: 14 }}
+                  initial={{ opacity: 0, y: 16 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.25, delay: Math.min(index * 0.03, 0.3) }}
+                  whileHover={{ y: -6, transition: { duration: 0.22, ease: [0.16, 1, 0.3, 1] } }}
+                  whileTap={{ scale: 0.985 }}
+                  transition={{ duration: 0.28, delay: Math.min(index * 0.04, 0.3) }}
                   style={{ height: '100%' }}
                 >
-                  <Card sx={{ height: '100%', overflow: 'hidden' }}>
+                  <Card
+                    sx={{
+                      height: '100%',
+                      overflow: 'hidden',
+                      transition: 'box-shadow 0.25s ease, border-color 0.25s ease',
+                      '&:hover': {
+                        boxShadow: (t) =>
+                          t.palette.mode === 'dark'
+                            ? '0 12px 24px -8px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.1)'
+                            : '0 12px 24px -8px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.06)',
+                      },
+                    }}
+                  >
                     <CardActionArea
                       onClick={() => navigate(`/places/${place.siteId}`)}
                       sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}
                     >
                       <Box
                         sx={{
-                          height: 160,
+                          height: 168,
                           position: 'relative',
-                          backgroundImage: place.coverImageUrl ? `url(${place.coverImageUrl})` : undefined,
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center',
+                          overflow: 'hidden',
                           bgcolor: 'action.hover',
                         }}
                       >
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            inset: 0,
+                            backgroundImage: place.coverImageUrl ? `url(${place.coverImageUrl})` : undefined,
+                            backgroundSize: 'cover',
+                            backgroundPosition: 'center',
+                            transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+                            '.MuiCard-root:hover &': {
+                              transform: 'scale(1.05)',
+                            },
+                          }}
+                        />
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            inset: 0,
+                            background:
+                              'linear-gradient(180deg, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.5) 100%)',
+                          }}
+                        />
                         <Chip
                           size="small"
-                          label={full ? 'Full' : `${place.availableSpaces} spots`}
+                          label={full ? 'Full' : `${place.availableSpaces} spots free`}
                           color={full ? 'error' : 'success'}
-                          sx={{ position: 'absolute', top: 12, left: 12, color: '#fff' }}
+                          sx={{
+                            position: 'absolute',
+                            top: 12,
+                            left: 12,
+                            color: '#fff',
+                            fontWeight: 700,
+                            boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
+                          }}
                         />
                       </Box>
                       <Box sx={{ p: 2, flex: 1, display: 'flex', flexDirection: 'column' }}>
-                        <Typography variant="h6" noWrap>
+                        <Typography variant="h6" noWrap fontWeight={700}>
                           {place.name}
                         </Typography>
                         <Stack direction="row" spacing={1} alignItems="center" sx={{ color: 'text.secondary' }}>

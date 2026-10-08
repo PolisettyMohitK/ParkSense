@@ -188,7 +188,15 @@ function PlaceCard({
   const isFull = place.totalSpaces > 0 && place.availableSpaces === 0
 
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [pressed && { opacity: 0.9 }]}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        {
+          transform: [{ scale: pressed ? 0.975 : 1 }],
+          opacity: pressed ? 0.92 : 1,
+        },
+      ]}
+    >
       <View style={styles.placeCard}>
         <View>
           {cover ? (

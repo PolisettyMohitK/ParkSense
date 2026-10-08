@@ -18,7 +18,7 @@ export type RootStackParamList = {
   ZoneDetail: { zoneId: number; zoneName: string }
   Zones: undefined
   Map: undefined
-  NewReservation: { siteId?: number; zoneId?: number } | undefined
+  NewReservation: { siteId?: number; zoneId?: number; spaceId?: number } | undefined
   Reservations: undefined
   Bookings: { tab?: string } | undefined
   Sessions: undefined

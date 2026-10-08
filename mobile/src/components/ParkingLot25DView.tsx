@@ -35,22 +35,32 @@ export default function ParkingLot25DView({
   const styles = useStyles()
   const [viewMode, setViewMode] = useState<ViewMode>('2.5D')
 
+  const [zoom, setZoom] = useState<number>(1)
+  const [filter, setFilter] = useState<'ALL' | 'FREE'>('ALL')
+
+  const filteredSpaces = useMemo(() => {
+    if (filter === 'FREE') {
+      return spaces.filter((s) => s.status === 'AVAILABLE')
+    }
+    return spaces
+  }, [spaces, filter])
+
   const availableCount = spaces.filter((s) => s.status === 'AVAILABLE').length
   const occupiedCount = spaces.filter((s) => s.status === 'OCCUPIED').length
   const reservedCount = spaces.filter((s) => s.status === 'RESERVED').length
 
   const screenWidth = Dimensions.get('window').width - spacing.lg * 2
 
-  // Compute spatial bounding box
+  // Compute spatial bounding box scaled by zoom
   const bounds = useMemo(() => {
     if (spaces.length === 0) return { width: screenWidth, height: 260 }
     const maxX = Math.max(...spaces.map((s) => (s.positionX ?? 0) + BAY_WIDTH))
     const maxY = Math.max(...spaces.map((s) => (s.positionY ?? 0) + BAY_HEIGHT))
     return {
-      width: Math.max(screenWidth, maxX + 80),
-      height: Math.max(260, maxY + 100),
+      width: Math.max(screenWidth, (maxX + 90) * zoom),
+      height: Math.max(280, (maxY + 110) * zoom),
     }
-  }, [spaces, screenWidth])
+  }, [spaces, screenWidth, zoom])
 
   if (isLoading) {
     return (
@@ -90,49 +100,60 @@ export default function ParkingLot25DView({
           ) : null}
         </View>
 
-        <View style={styles.modeToggle}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          {/* Zoom Toggle */}
           <Pressable
-            onPress={() => setViewMode('2.5D')}
-            style={[
-              styles.modeBtn,
-              viewMode === '2.5D' && { backgroundColor: colors.surface, borderColor: colors.separator },
-            ]}
+            onPress={() => setZoom((z) => (z === 1 ? 1.2 : z === 1.2 ? 0.85 : 1))}
+            style={styles.zoomBtn}
           >
-            <Ionicons
-              name="cube-outline"
-              size={13}
-              color={viewMode === '2.5D' ? colors.text : colors.textSecondary}
-            />
-            <Text
+            <Text style={styles.zoomText}>{zoom === 1 ? '1x' : zoom === 1.2 ? '1.2x' : '0.8x'}</Text>
+          </Pressable>
+
+          {/* 2.5D vs 2D Mode Toggle */}
+          <View style={styles.modeToggle}>
+            <Pressable
+              onPress={() => setViewMode('2.5D')}
               style={[
-                styles.modeBtnText,
-                viewMode === '2.5D' ? styles.modeBtnActive : { color: colors.textSecondary },
+                styles.modeBtn,
+                viewMode === '2.5D' && { backgroundColor: colors.surface, borderColor: colors.separator },
               ]}
             >
-              2.5D Lot
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setViewMode('2D')}
-            style={[
-              styles.modeBtn,
-              viewMode === '2D' && { backgroundColor: colors.surface, borderColor: colors.separator },
-            ]}
-          >
-            <Ionicons
-              name="map-outline"
-              size={13}
-              color={viewMode === '2D' ? colors.text : colors.textSecondary}
-            />
-            <Text
+              <Ionicons
+                name="cube-outline"
+                size={13}
+                color={viewMode === '2.5D' ? colors.text : colors.textSecondary}
+              />
+              <Text
+                style={[
+                  styles.modeBtnText,
+                  viewMode === '2.5D' ? styles.modeBtnActive : { color: colors.textSecondary },
+                ]}
+              >
+                2.5D
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setViewMode('2D')}
               style={[
-                styles.modeBtnText,
-                viewMode === '2D' ? styles.modeBtnActive : { color: colors.textSecondary },
+                styles.modeBtn,
+                viewMode === '2D' && { backgroundColor: colors.surface, borderColor: colors.separator },
               ]}
             >
-              2D Plan
-            </Text>
-          </Pressable>
+              <Ionicons
+                name="map-outline"
+                size={13}
+                color={viewMode === '2D' ? colors.text : colors.textSecondary}
+              />
+              <Text
+                style={[
+                  styles.modeBtnText,
+                  viewMode === '2D' ? styles.modeBtnActive : { color: colors.textSecondary },
+                ]}
+              >
+                2D
+              </Text>
+            </Pressable>
+          </View>
         </View>
       </View>
 
@@ -145,20 +166,20 @@ export default function ParkingLot25DView({
         >
           <View style={{ width: bounds.width, height: bounds.height }}>
             {/* Drive Aisle Lane Markings */}
-            <View style={[styles.driveAisle, { top: bounds.height / 2 - 20, width: bounds.width }]}>
+            <View style={[styles.driveAisle, { top: bounds.height / 2 - 22, width: bounds.width }]}>
               <View style={styles.laneDash} />
-              <Text style={styles.laneText}>◄ DRIVE AISLE · ENTRY / EXIT ►</Text>
+              <Text style={styles.laneText}>◄ ENTRY · DRIVE AISLE · MAX 10 KM/H ◄</Text>
               <View style={styles.laneDash} />
             </View>
 
             {/* Parking Spaces */}
-            {spaces.map((space) => {
+            {filteredSpaces.map((space, index) => {
               const isSelected = selectedSpaceId === space.id
               const isAvailable = space.status === 'AVAILABLE'
               const isOccupied = space.status === 'OCCUPIED'
 
-              const posX = space.positionX ?? 40
-              const posY = space.positionY ?? 60
+              const posX = (space.positionX ?? 40) * zoom
+              const posY = (space.positionY ?? 60) * zoom
 
               // 2.5D Isometric slant calculation
               const left = viewMode === '2.5D' ? posX + (posY * ISO_SLANT * 0.3) : posX
@@ -170,8 +191,8 @@ export default function ParkingLot25DView({
               let statusText = 'FREE'
 
               if (isOccupied) {
-                bg = colors.danger
-                edgeColor = '#8A000D'
+                bg = '#2A2D32'
+                edgeColor = '#141518'
                 statusText = 'BUSY'
               } else if (space.status === 'RESERVED') {
                 bg = colors.warning
@@ -187,12 +208,23 @@ export default function ParkingLot25DView({
                     {
                       left,
                       top,
-                      width: BAY_WIDTH,
-                      height: BAY_HEIGHT,
+                      width: BAY_WIDTH * zoom,
+                      height: BAY_HEIGHT * zoom,
                     },
                     viewMode === '2.5D' && styles.bayIsoTransform,
                   ]}
                 >
+                  {/* Suspended Glowing LED Status Beacon Puck */}
+                  <View
+                    style={[
+                      styles.beaconPuck,
+                      {
+                        backgroundColor: isAvailable ? colors.success : isOccupied ? colors.danger : colors.warning,
+                        shadowColor: isAvailable ? colors.success : colors.danger,
+                      },
+                    ]}
+                  />
+
                   {/* 2.5D Isometric Extruded Edge (volumetric depth) */}
                   {viewMode === '2.5D' ? (
                     <View
@@ -200,8 +232,8 @@ export default function ParkingLot25DView({
                         styles.bayDepthEdge,
                         {
                           backgroundColor: edgeColor,
-                          width: BAY_WIDTH,
-                          height: BAY_HEIGHT,
+                          width: BAY_WIDTH * zoom,
+                          height: BAY_HEIGHT * zoom,
                         },
                       ]}
                     />
@@ -217,9 +249,9 @@ export default function ParkingLot25DView({
                         backgroundColor: bg,
                         borderColor: isSelected ? '#FFFFFF' : 'rgba(255,255,255,0.25)',
                         borderWidth: isSelected ? 2.5 : 1,
+                        transform: [{ scale: pressed ? 0.94 : isSelected ? 1.05 : 1 }],
                       },
                       isSelected && styles.baySelectedGlow,
-                      pressed && { opacity: 0.8 },
                     ]}
                   >
                     {/* Bay Stall Lines */}
@@ -229,13 +261,20 @@ export default function ParkingLot25DView({
                       <Text style={[styles.bayCode, { color: textColor }]}>
                         {space.code ?? `S${space.id}`}
                       </Text>
+
                       {isOccupied ? (
-                        <Ionicons name="car" size={15} color="#FFFFFF" style={{ marginVertical: 2 }} />
+                        <View style={styles.carSilhouette}>
+                          <Ionicons name="car-sport" size={20 * zoom} color="#FFFFFF" />
+                        </View>
                       ) : (
-                        <Text style={[styles.bayStatusPill, { color: textColor }]}>
-                          {statusText}
-                        </Text>
+                        <View style={styles.freeIndicator}>
+                          <Ionicons name="car-outline" size={14 * zoom} color="rgba(255,255,255,0.5)" />
+                          <Text style={[styles.bayStatusPill, { color: textColor }]}>
+                            {statusText}
+                          </Text>
+                        </View>
                       )}
+
                       {isSelected ? (
                         <View style={styles.selectedBadge}>
                           <Ionicons name="checkmark" size={10} color="#000000" />
@@ -321,6 +360,21 @@ const useStyles = makeStyles((colors) =>
       padding: 2,
       gap: 2,
     },
+    zoomBtn: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.separator,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    zoomText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: colors.text,
+    },
     modeBtn: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -340,7 +394,7 @@ const useStyles = makeStyles((colors) =>
       fontWeight: '700',
     },
     lotCanvas: {
-      backgroundColor: '#181A1E',
+      backgroundColor: '#16181B',
       padding: spacing.md,
     },
     driveAisle: {
@@ -368,6 +422,21 @@ const useStyles = makeStyles((colors) =>
     },
     bayContainer: {
       position: 'absolute',
+    },
+    beaconPuck: {
+      position: 'absolute',
+      top: -4,
+      alignSelf: 'center',
+      width: 12,
+      height: 4,
+      borderRadius: 2,
+      zIndex: 2,
+      borderWidth: 0.5,
+      borderColor: '#FFFFFF',
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.8,
+      shadowRadius: 4,
+      elevation: 5,
     },
     bayIsoTransform: {
       transform: [{ skewX: '-8deg' }],
@@ -421,6 +490,16 @@ const useStyles = makeStyles((colors) =>
       fontWeight: '700',
       marginTop: 2,
       letterSpacing: 0.5,
+    },
+    carSilhouette: {
+      marginVertical: 2,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    freeIndicator: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginVertical: 2,
     },
     selectedBadge: {
       position: 'absolute',

@@ -111,7 +111,7 @@ export default function PlaceDetailScreen() {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={{ position: 'relative' }}>
-          <PlacePhotoSlideshow coverImageUrl={summary.coverImageUrl} height={240} />
+          <PlacePhotoSlideshow photos={summary.photoUrls} coverImageUrl={summary.coverImageUrl} height={240} />
           <Pressable
             onPress={() => navigation.goBack()}
             style={[styles.back, { top: insets.top + 8 }]}
@@ -134,15 +134,12 @@ export default function PlaceDetailScreen() {
 
           {/* Pricing & Proximity Tagline */}
           <Row style={{ marginTop: 4 }}>
-            <Badge
-              kind="verification"
-              value={isPaid ? 'PROPOSED' : 'VERIFIED'}
-            />
+            <Badge kind="pricing" value={isPaid ? 'PAID' : 'FREE'} />
             <Text style={styles.meta}>
-              {summary.distanceKm != null ? `${summary.distanceKm.toFixed(2)} km away  ·  ` : ''}
+              {summary.distanceKm != null ? `${summary.distanceKm.toFixed(1)} km away  ·  ` : ''}
               {isPaid
                 ? `₹${Number(summary.hourlyRate).toFixed(0)}/hr`
-                : 'Free / Customer parking'}
+                : 'Free for visitors'}
             </Text>
           </Row>
 

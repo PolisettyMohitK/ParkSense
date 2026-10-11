@@ -1,6 +1,9 @@
 import { client, API_BASE } from './client'
 import type {
+  AnalyticsSummary,
   AuthResponse,
+  PaymentMethod,
+  PriceQuote,
   MonitoringDevice,
   OccupancyEvent,
   Organization,
@@ -26,6 +29,10 @@ export const authApi = {
   register: async (payload: { fullName: string; email: string; password: string; phone?: string }) =>
     (await client.post<AuthResponse>('/auth/register', payload)).data,
   me: async () => (await client.get<User>('/auth/me')).data,
+  updateProfile: async (payload: { fullName: string; phone?: string | null }) =>
+    (await client.put<User>('/me', payload)).data,
+  changePassword: async (currentPassword: string, newPassword: string) =>
+    client.post('/me/password', { currentPassword, newPassword }),
 }
 
 export const zonesApi = {
@@ -90,8 +97,10 @@ export const devicesApi = {
 export const reservationsApi = {
   list: async (userId?: number) =>
     (await client.get<Reservation[]>('/reservations', { params: { userId } })).data,
+  get: async (id: number) => (await client.get<Reservation>(`/reservations/${id}`)).data,
   create: async (payload: {
-    userId: number
+    /** Staff only: book on behalf of this driver. */
+    userId?: number | null
     vehicleId: number
     zoneId: number
     assignedSpaceId?: number | null
@@ -100,6 +109,8 @@ export const reservationsApi = {
   }) => (await client.post<Reservation>('/reservations', payload)).data,
   cancel: async (id: number) => (await client.patch<Reservation>(`/reservations/${id}/cancel`)).data,
   complete: async (id: number) => (await client.patch<Reservation>(`/reservations/${id}/complete`)).data,
+  checkIn: async (id: number) => (await client.post<Reservation>(`/reservations/${id}/check-in`)).data,
+  checkOut: async (id: number) => (await client.post<MySession>(`/reservations/${id}/check-out`)).data,
 }
 
 export const occupancyApi = {
@@ -121,7 +132,7 @@ export const sessionsApi = {
 }
 
 export const analyticsApi = {
-  summary: async () => (await client.get('/analytics/summary')).data,
+  summary: async () => (await client.get<AnalyticsSummary>('/analytics/summary')).data,
 }
 
 export const placesApi = {
@@ -133,13 +144,22 @@ export const placesApi = {
     (await client.get<PublicZone[]>(`/places/${siteId}/zones`)).data,
   spaces: async (siteId: number, zoneId: number) =>
     (await client.get<PublicSpace[]>(`/places/${siteId}/zones/${zoneId}/spaces`)).data,
+  quote: async (siteId: number, start: string, end: string) =>
+    (await client.get<PriceQuote>(`/places/${siteId}/quote`, { params: { start, end } })).data,
 }
 
 export const mySessionsApi = {
   list: async () => (await client.get<MySession[]>('/me/sessions')).data,
-  active: async () => (await client.get<MySession | ''>('/me/sessions/active')).data,
+  active: async () => {
+    const { data } = await client.get<MySession | ''>('/me/sessions/active')
+    return data || null
+  },
+  /** Simulated settlement - no card or account details are collected. */
+  pay: async (id: number, method: PaymentMethod) =>
+    (await client.post<MySession>(`/me/sessions/${id}/pay`, { method })).data,
 }
 
+/** Resolve a server-relative image path (e.g. `/places/inorbit.jpg`) against the API host. */
 export function coverUrl(path?: string | null) {
   if (!path) return null
   if (path.startsWith('http')) return path

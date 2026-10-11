@@ -8,6 +8,7 @@ import {
   Card,
   CategoryChips,
   EmptyState,
+  ErrorState,
   Loading,
   Muted,
   Row,
@@ -26,6 +27,9 @@ import type { RootStackParamList } from '../navigation/types'
 import { makeStyles, useTheme } from '../theme/ThemeProvider'
 import { radius, spacing } from '../theme/palette'
 import { formatDistanceToNow } from 'date-fns'
+import { apiErrorMessage } from '../api/client'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { formatMoney } from '../utils/format'
 
 const CATEGORIES: { value: PlaceCategory | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'All' },
@@ -59,26 +63,30 @@ export default function ExploreScreen() {
 
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<PlaceCategory | 'ALL'>('ALL')
+  const search = useDebouncedValue(query.trim(), 300)
 
   const placesQuery = useQuery({
     queryKey: queryKeys.places.list({
       lat: location.latitude,
       lng: location.longitude,
-      q: query.trim() || undefined,
+      q: search || undefined,
       category: category === 'ALL' ? undefined : category,
     }),
     queryFn: () =>
       placesApi.search({
         lat: location.latitude,
         lng: location.longitude,
-        q: query.trim() || undefined,
+        q: search || undefined,
         category: category === 'ALL' ? undefined : category,
       }),
+    placeholderData: (previous) => previous,
   })
 
+  // Only the signed-in user's own bookings - staff accounts would otherwise see everyone's.
   const bookingsQuery = useQuery({
-    queryKey: queryKeys.reservations.all,
-    queryFn: () => reservationsApi.list(),
+    queryKey: queryKeys.reservations.list(user?.id),
+    queryFn: () => reservationsApi.list(user?.id),
+    enabled: Boolean(user),
   })
   const sessionsQuery = useQuery({
     queryKey: queryKeys.mySessions.all,
@@ -97,18 +105,20 @@ export default function ExploreScreen() {
     if (session) {
       return {
         id: `session-${session.id}`,
-        title: `${session.spaceCode ?? 'Active session'} · ${session.zoneName}`,
-        subtitle: `Checked in ${formatDistanceToNow(new Date(session.checkInAt), { addSuffix: true })}`,
+        title: `Parked at ${session.siteName ?? session.zoneName} · bay ${session.spaceCode ?? '—'}`,
+        subtitle: `Checked in ${formatDistanceToNow(new Date(session.checkInAt), { addSuffix: true })}${
+          session.hourlyRate ? ` · ${formatMoney(session.amount)} so far` : ''
+        }`,
       }
     }
-    const reservation = (bookingsQuery.data ?? []).find((item) =>
-      ['PENDING', 'CONFIRMED', 'ACTIVE'].includes(item.status),
-    )
+    const reservation = (bookingsQuery.data ?? [])
+      .filter((item) => ['PENDING', 'CONFIRMED', 'ACTIVE'].includes(item.status))
+      .sort((a, b) => a.startTime.localeCompare(b.startTime))[0]
     if (reservation) {
       return {
         id: `reservation-${reservation.id}`,
-        title: `${reservation.code} · ${reservation.zoneName}`,
-        subtitle: `Ends ${new Date(reservation.endTime).toLocaleString()}`,
+        title: `Next: ${reservation.siteName ?? reservation.zoneName} · bay ${reservation.assignedSpaceCode ?? 'TBA'}`,
+        subtitle: `Starts ${formatDistanceToNow(new Date(reservation.startTime), { addSuffix: true })} · tap to check in`,
       }
     }
     return null
@@ -117,7 +127,14 @@ export default function ExploreScreen() {
   const places = placesQuery.data ?? []
 
   return (
-    <Screen>
+    <Screen
+      onRefresh={() => {
+        placesQuery.refetch()
+        bookingsQuery.refetch()
+        sessionsQuery.refetch()
+      }}
+      refreshing={placesQuery.isRefetching}
+    >
       <View style={styles.header}>
         <View>
           <Text style={styles.headerKicker}>Parking near</Text>
@@ -129,13 +146,13 @@ export default function ExploreScreen() {
       </View>
 
       {!location.granted && !location.loading ? (
-        <Text style={styles.locationHint}>Showing distances from MG Road · enable location for accuracy</Text>
+        <Text style={styles.locationHint}>Showing distances from Jubilee Hills · enable location for accuracy</Text>
       ) : null}
 
       <SearchBar value={query} onChangeText={setQuery} placeholder="Search cafés, malls, areas…" />
 
       {liveBooking ? (
-        <Pressable onPress={() => navigation.navigate('Bookings')}>
+        <Pressable onPress={() => navigation.navigate('Tabs', { screen: 'Bookings' })}>
           <Card style={styles.liveCard}>
             <Row between>
               <View style={styles.liveText}>
@@ -152,6 +169,8 @@ export default function ExploreScreen() {
 
       {placesQuery.isLoading ? (
         <Loading label="Finding parking…" />
+      ) : placesQuery.isError ? (
+        <ErrorState message={apiErrorMessage(placesQuery.error)} onRetry={() => placesQuery.refetch()} />
       ) : places.length === 0 ? (
         <EmptyState
           title="No places found"
@@ -196,7 +215,7 @@ function PlaceCard({
     >
       <View style={styles.placeCard}>
         <View style={styles.coverWrapper}>
-          <PlacePhotoSlideshow coverImageUrl={place.coverImageUrl} height={165} />
+          <PlacePhotoSlideshow photos={place.photoUrls} coverImageUrl={place.coverImageUrl} height={165} autoPlay={false} />
 
           {/* Minimal translucent frosted capsule for status */}
           <View style={styles.spotCapsule}>
@@ -212,9 +231,9 @@ function PlaceCard({
           </Text>
           <Text style={styles.placeMeta} numberOfLines={1}>
             {place.category ? CATEGORY_LABEL[place.category] : 'Parking'}
-            {place.distanceKm != null ? ` · ${place.distanceKm.toFixed(2)} km` : ''}
+            {place.distanceKm != null ? ` · ${place.distanceKm.toFixed(1)} km` : ''}
             {place.hourlyRate != null && Number(place.hourlyRate) > 0
-              ? ` · ₹${Number(place.hourlyRate).toFixed(0)}/hr`
+              ? ` · ${formatMoney(Number(place.hourlyRate))}/hr`
               : ' · Free'}
           </Text>
           <Text style={styles.placeAddress} numberOfLines={1}>

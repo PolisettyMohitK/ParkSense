@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native'
+import { Alert, StyleSheet, Text, View } from 'react-native'
 import { Pressable } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -19,9 +19,10 @@ export default function ProfileScreen() {
   const isManager = isAdmin || user?.role === 'MANAGER'
 
   const items: { label: string; onPress: () => void; subtitle?: string }[] = [
-    { label: 'My reservations', onPress: () => navigation.navigate('Reservations') },
-    { label: 'My sessions', onPress: () => navigation.navigate('Sessions') },
+    { label: 'My bookings', onPress: () => navigation.navigate('Tabs', { screen: 'Bookings' }) },
+    { label: 'Parking history & receipts', onPress: () => navigation.navigate('Sessions') },
     { label: 'My vehicles', onPress: () => navigation.navigate('Vehicles') },
+    { label: 'Account & password', onPress: () => navigation.navigate('Account') },
   ]
 
   const adminItems: { label: string; onPress: () => void }[] = []
@@ -43,13 +44,13 @@ export default function ProfileScreen() {
           <Title size={24}>{user?.fullName}</Title>
           <Muted>{user?.email}</Muted>
         </View>
-        <Badge kind="verification" value={isAdmin ? 'VERIFIED' : 'PROPOSED'} />
+        <Badge kind="role" value={user?.role ?? 'USER'} />
       </Row>
 
       <Card>
         <Row between>
           <Muted>Role</Muted>
-          <Text style={styles.value}>{user?.role}</Text>
+          <Text style={styles.value}>{user?.role === 'USER' ? 'Driver' : user?.role === 'ADMIN' ? 'Admin' : 'Manager'}</Text>
         </Row>
         <Row between>
           <Muted>Organization</Muted>
@@ -103,7 +104,16 @@ export default function ProfileScreen() {
         </Pressable>
       </Card>
 
-      <AppButton label="Sign out" variant="danger" onPress={() => logout()} />
+      <AppButton
+        label="Sign out"
+        variant="danger"
+        onPress={() =>
+          Alert.alert('Sign out?', 'You will need to sign in again to book parking.', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Sign out', style: 'destructive', onPress: () => void logout() },
+          ])
+        }
+      />
     </Screen>
   )
 }

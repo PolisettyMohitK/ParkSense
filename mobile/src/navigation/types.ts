@@ -13,14 +13,14 @@ export type TabParamList = {
 
 export type RootStackParamList = {
   Login: undefined
+  Register: undefined
+  Account: undefined
   Tabs: NavigatorScreenParams<TabParamList> | undefined
   PlaceDetail: { siteId: number }
   ZoneDetail: { zoneId: number; zoneName: string }
   Zones: undefined
   Map: undefined
   NewReservation: { siteId?: number; zoneId?: number; spaceId?: number } | undefined
-  Reservations: undefined
-  Bookings: { tab?: string } | undefined
   Sessions: undefined
   Vehicles: undefined
   VehicleForm: { vehicle?: Vehicle } | undefined

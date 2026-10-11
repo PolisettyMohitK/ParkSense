@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Client } from '@stomp/stompjs'
-import { API_BASE } from '../api/client'
+import { API_BASE, getAuthToken } from '../api/client'
 import type { OccupancyChangedEvent } from '../types'
 
 type Handler = (event: OccupancyChangedEvent) => void
@@ -15,12 +15,19 @@ function emitStatus() {
 }
 
 export function connectSocket() {
-  if (client) {
+  const token = getAuthToken()
+  if (client || !token) {
     return
   }
   client = new Client({
     brokerURL: `${API_BASE.replace(/^http/, 'ws')}/ws/websocket`,
+    connectHeaders: { Authorization: `Bearer ${token}` },
     reconnectDelay: 5000,
+    heartbeatIncoming: 20000,
+    heartbeatOutgoing: 20000,
+    // React Native's WebSocket needs these for STOMP frames to parse reliably.
+    forceBinaryWSFrames: true,
+    appendMissingNULLonIncoming: true,
     onConnect: () => {
       connected = true
       emitStatus()
@@ -41,12 +48,16 @@ export function connectSocket() {
       connected = false
       emitStatus()
     },
+    onStompError: () => {
+      connected = false
+      emitStatus()
+    },
   })
   client.activate()
 }
 
 export function disconnectSocket() {
-  client?.deactivate()
+  void client?.deactivate()
   client = null
   connected = false
   emitStatus()

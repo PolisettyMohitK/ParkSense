@@ -16,6 +16,8 @@ export type DeviceType = 'CAMERA' | 'SENSOR' | 'MANUAL'
 export type DeviceStatus = 'ONLINE' | 'OFFLINE' | 'MAINTENANCE'
 export type VehicleType = 'CAR' | 'BIKE' | 'SUV' | 'TRUCK' | 'EV' | 'OTHER'
 export type SessionStatus = 'ACTIVE' | 'COMPLETED'
+export type PaymentStatus = 'NOT_REQUIRED' | 'PENDING' | 'PAID'
+export type PaymentMethod = 'UPI' | 'CARD' | 'CASH' | 'WALLET'
 
 export interface Organization {
   id: number
@@ -142,6 +144,9 @@ export interface Reservation {
   status: ReservationStatus
   startTime: string
   endTime: string
+  siteId?: number | null
+  siteName?: string | null
+  estimatedAmount?: number | null
   createdAt: string
 }
 
@@ -164,6 +169,9 @@ export interface ParkingSession {
   checkOutAt?: string | null
   durationMinutes?: number | null
   note?: string | null
+  amount?: number | null
+  paymentStatus?: PaymentStatus | null
+  paymentRef?: string | null
 }
 
 export interface MonitoringDevice {
@@ -251,6 +259,7 @@ export interface PlaceSummary {
   totalSpaces: number
   availableSpaces: number
   occupiedSpaces: number
+  photoUrls?: string[]
 }
 
 export interface PlaceDetail {
@@ -277,9 +286,12 @@ export interface PublicZone {
   name: string
   code: string
   type: ZoneType
-  totalCapacity: number
-  occupiedCount: number
-  availableCount: number
+  floor?: string | null
+  description?: string | null
+  totalSpaces: number
+  occupiedSpaces: number
+  availableSpaces: number
+  reservedSpaces: number
 }
 
 export interface PublicSpace {
@@ -299,10 +311,33 @@ export interface MySession {
   spaceCode?: string | null
   zoneId?: number | null
   zoneName?: string | null
+  siteId?: number | null
+  siteName?: string | null
   vehicleId?: number | null
   plateNumber?: string | null
+  reservationId?: number | null
+  reservationCode?: string | null
   status: SessionStatus
   checkInAt: string
   checkOutAt?: string | null
   durationMinutes?: number | null
+  hourlyRate?: number | null
+  /** Running charge while ACTIVE, final once COMPLETED. */
+  amount?: number | null
+  currency?: string | null
+  paymentStatus?: PaymentStatus | null
+  paymentMethod?: PaymentMethod | null
+  paymentRef?: string | null
+  paidAt?: string | null
+}
+
+export interface PriceQuote {
+  siteId: number
+  startTime: string
+  endTime: string
+  complimentary: boolean
+  hourlyRate: number
+  billableHours: number
+  amount: number
+  currency: string
 }

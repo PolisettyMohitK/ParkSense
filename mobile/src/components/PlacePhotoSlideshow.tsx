@@ -3,59 +3,47 @@ import { StyleSheet, View } from 'react-native'
 import { Image } from 'expo-image'
 import { coverUrl } from '../api/endpoints'
 
-export function getMobilePlaceGallery(coverImageUrl?: string | null): string[] {
-  if (!coverImageUrl) {
-    const fallback = coverUrl('/places/campus-banjara.jpg')
-    return fallback ? [fallback] : []
-  }
-  const base = coverImageUrl.replace(/\.jpg$/, '')
-  let paths: string[] = []
-  if (coverImageUrl.includes('cafe-1') || coverImageUrl.includes('restaurant')) {
-    paths = [coverImageUrl, `${base}-b.jpg`, `${base}-c.jpg`]
-  } else {
-    paths = [coverImageUrl, `${base}-b.jpg`]
-  }
-  return paths.map((p) => coverUrl(p)).filter(Boolean) as string[]
-}
+const FALLBACK = '/places/campus-banjara.jpg'
 
 interface PlacePhotoSlideshowProps {
+  /** Gallery from the API (`photoUrls`); falls back to the cover alone. */
+  photos?: string[] | null
   coverImageUrl?: string | null
   height?: number
   autoPlayIntervalMs?: number
+  /** List cards pass false so a long list does not run a timer per card. */
+  autoPlay?: boolean
 }
 
 export default function PlacePhotoSlideshow({
+  photos,
   coverImageUrl,
   height = 160,
   autoPlayIntervalMs = 4200,
+  autoPlay = true,
 }: PlacePhotoSlideshowProps) {
-  const photos = getMobilePlaceGallery(coverImageUrl)
+  const gallery = (photos && photos.length > 0 ? photos : [coverImageUrl ?? FALLBACK])
+    .map((path) => coverUrl(path))
+    .filter(Boolean) as string[]
   const [index, setIndex] = useState(0)
 
   useEffect(() => {
-    if (photos.length <= 1) return
+    if (!autoPlay || gallery.length <= 1) return
     const interval = setInterval(() => {
-      setIndex((prev) => (prev + 1) % photos.length)
+      setIndex((prev) => (prev + 1) % gallery.length)
     }, autoPlayIntervalMs)
-
     return () => clearInterval(interval)
-  }, [photos.length, autoPlayIntervalMs])
+  }, [autoPlay, gallery.length, autoPlayIntervalMs])
 
-  const currentUri = photos[index] ?? photos[0]
+  const currentUri = gallery[index % Math.max(1, gallery.length)]
 
   return (
     <View style={[styles.container, { height }]}>
       {currentUri ? (
-        <Image
-          source={{ uri: currentUri }}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          transition={750}
-        />
+        <Image source={{ uri: currentUri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={750} />
       ) : (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: '#16181B' }]} />
       )}
-
       {/* Subtle vignette for contrast */}
       <View style={styles.vignette} />
     </View>

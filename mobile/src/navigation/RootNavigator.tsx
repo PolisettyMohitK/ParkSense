@@ -3,6 +3,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { Ionicons } from '@expo/vector-icons'
 import LoginScreen from '../screens/LoginScreen'
+import RegisterScreen from '../screens/RegisterScreen'
+import AccountScreen from '../screens/AccountScreen'
 import LockScreen from '../screens/LockScreen'
 import ExploreScreen from '../screens/ExploreScreen'
 import PlaceDetailScreen from '../screens/PlaceDetailScreen'
@@ -14,7 +16,6 @@ import MapScreen from '../screens/MapScreen'
 import CameraScreen from '../screens/CameraScreen'
 import ProfileScreen from '../screens/ProfileScreen'
 import SettingsScreen from '../screens/SettingsScreen'
-import ReservationsScreen from '../screens/ReservationsScreen'
 import NewReservationScreen from '../screens/NewReservationScreen'
 import SessionsScreen from '../screens/SessionsScreen'
 import VehiclesScreen from '../screens/VehiclesScreen'
@@ -134,17 +135,16 @@ export default function RootNavigator() {
           <>
             <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
             <Stack.Screen name="PlaceDetail" component={PlaceDetailScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="Bookings" component={BookingsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="ZoneDetail" component={ZoneDetailScreen} options={{ title: 'Zone' }} />
             <Stack.Screen name="Zones" component={ZonesScreen} options={{ title: 'Zones' }} />
             <Stack.Screen name="Map" component={MapScreen} options={{ title: 'Live Map' }} />
-            <Stack.Screen name="Reservations" component={ReservationsScreen} options={{ title: 'Reservations' }} />
             <Stack.Screen
               name="NewReservation"
               component={NewReservationScreen}
               options={{ title: 'Reserve a spot' }}
             />
-            <Stack.Screen name="Sessions" component={SessionsScreen} options={{ title: 'Sessions' }} />
+            <Stack.Screen name="Sessions" component={SessionsScreen} options={{ title: 'History & receipts' }} />
+            <Stack.Screen name="Account" component={AccountScreen} options={{ title: 'Account' }} />
             <Stack.Screen name="Vehicles" component={VehiclesScreen} options={{ title: 'Vehicles' }} />
             <Stack.Screen name="VehicleForm" component={VehicleFormScreen} options={{ title: 'Vehicle' }} />
             <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
@@ -158,7 +158,10 @@ export default function RootNavigator() {
             <Stack.Screen name="AdminDevices" component={AdminDevicesScreen} options={{ title: 'Devices' }} />
           </>
         ) : (
-          <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+          <>
+            <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Register" component={RegisterScreen} options={{ title: 'Sign up' }} />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>

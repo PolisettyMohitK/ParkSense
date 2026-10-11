@@ -122,7 +122,25 @@ export function statusMaps(colors: Palette) {
     OFFLINE: { bg: colors.neutralDim, fg: colors.textSecondary, label: 'Offline' },
     MAINTENANCE: { bg: colors.warningDim, fg: colors.warning, label: 'Maintenance' },
   }
-  return { space, verification, reservation, device }
+  const payment: Record<string, BadgePalette> = {
+    NOT_REQUIRED: { bg: colors.neutralDim, fg: colors.textSecondary, label: 'Complimentary' },
+    PENDING: { bg: colors.warningDim, fg: colors.warning, label: 'Payment due' },
+    PAID: { bg: colors.successDim, fg: colors.success, label: 'Paid' },
+  }
+  const pricing: Record<string, BadgePalette> = {
+    FREE: { bg: colors.successDim, fg: colors.success, label: 'Free parking' },
+    PAID: { bg: colors.neutralDim, fg: colors.text, label: 'Paid parking' },
+  }
+  const role: Record<string, BadgePalette> = {
+    ADMIN: { bg: colors.primaryDim, fg: colors.text, label: 'Admin' },
+    MANAGER: { bg: colors.infoDim, fg: colors.info, label: 'Manager' },
+    USER: { bg: colors.neutralDim, fg: colors.textSecondary, label: 'Driver' },
+  }
+  const session: Record<string, BadgePalette> = {
+    ACTIVE: { bg: colors.successDim, fg: colors.success, label: 'Parked now' },
+    COMPLETED: { bg: colors.neutralDim, fg: colors.textSecondary, label: 'Completed' },
+  }
+  return { space, verification, reservation, device, payment, pricing, role, session }
 }
 
 export type BadgeKind = keyof ReturnType<typeof statusMaps>

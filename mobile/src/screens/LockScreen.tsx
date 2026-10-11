@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { AppButton, Screen } from '../components/ui'
 import { useAuth } from '../store/AuthContext'
@@ -8,6 +9,11 @@ export default function LockScreen() {
   const styles = useStyles()
   const { colors } = useTheme()
   const { unlock, logout, user } = useAuth()
+
+  // Prompt straight away instead of making the user tap Unlock first.
+  useEffect(() => {
+    void unlock()
+  }, [unlock])
 
   return (
     <Screen scroll={false} style={styles.container}>

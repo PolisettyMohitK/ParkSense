@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import {
   ActivityIndicator,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -20,10 +21,15 @@ export function Screen({
   children,
   scroll = true,
   style,
+  onRefresh,
+  refreshing = false,
 }: {
   children: ReactNode
   scroll?: boolean
   style?: StyleProp<ViewStyle>
+  /** Enables pull-to-refresh on scrolling screens. */
+  onRefresh?: () => void
+  refreshing?: boolean
 }) {
   const { colors } = useTheme()
   const body = (
@@ -32,7 +38,15 @@ export function Screen({
   return (
     <SafeAreaView style={[styles(colors).safe]} edges={['top', 'left', 'right']}>
       {scroll ? (
-        <ScrollView contentContainerStyle={styles(colors).scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={styles(colors).scroll}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            onRefresh ? (
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.textSecondary} />
+            ) : undefined
+          }
+        >
           {body}
         </ScrollView>
       ) : (
@@ -199,7 +213,7 @@ export function AppInput({
   onChangeText: (value: string) => void
   placeholder?: string
   secureTextEntry?: boolean
-  keyboardType?: 'default' | 'numeric' | 'email-address'
+  keyboardType?: 'default' | 'numeric' | 'email-address' | 'phone-pad'
   multiline?: boolean
   autoCapitalize?: 'none' | 'sentences' | 'words'
 }) {
@@ -381,6 +395,23 @@ export function EmptyState({
         </View>
       ) : null}
     </View>
+  )
+}
+
+export function ErrorState({
+  message,
+  onRetry,
+}: {
+  message: string
+  onRetry?: () => void
+}) {
+  return (
+    <EmptyState
+      icon="cloud-offline-outline"
+      title="Something went wrong"
+      subtitle={message}
+      action={onRetry ? { label: 'Try again', onPress: onRetry } : undefined}
+    />
   )
 }
 

@@ -11,6 +11,7 @@ export const VISION_BASE = process.env.EXPO_PUBLIC_VISION_URL ?? `http://${devHo
 export const TOKEN_KEY = 'parksense.token'
 export const USER_KEY = 'parksense.user'
 export const BIOMETRIC_KEY = 'parksense.biometric'
+export const EXPIRES_KEY = 'parksense.expiresAt'
 
 let token: string | null = null
 
@@ -30,7 +31,7 @@ export function onUnauthorized(handler: () => void) {
 
 export const client = axios.create({
   baseURL: `${API_BASE}/api`,
-  timeout: 20000,
+  timeout: 60000, // free-tier hosts can take ~50s to wake up
   headers: { 'Content-Type': 'application/json' },
 })
 
@@ -48,7 +49,9 @@ client.interceptors.response.use(
   (response) => response,
   (error: AxiosError<ApiError>) => {
     const url = error.config?.url ?? ''
-    if (error.response?.status === 401 && !url.includes('/auth/login')) {
+    const isAuthCall = url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/me/password')
+    if (error.response?.status === 401 && !isAuthCall) {
+      // A rejected token must not come back from SecureStore on the next request or launch.
       token = null
       unauthorizedHandler?.()
     }
@@ -63,6 +66,11 @@ export function apiErrorMessage(error: unknown): string {
       return Object.entries(data.fieldErrors)
         .map(([field, message]) => `${field}: ${message}`)
         .join(', ')
+    }
+    if (!error.response) {
+      return error.code === 'ECONNABORTED'
+        ? 'The server took too long to respond. It may be waking up - please try again.'
+        : `Cannot reach the server at ${API_BASE}. Check your connection.`
     }
     return data?.message ?? error.message
   }

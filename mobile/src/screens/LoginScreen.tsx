@@ -1,5 +1,8 @@
 import { useState } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import type { RootStackParamList } from '../navigation/types'
 import { AppButton, AppInput, Card, ChipRow, Muted, Screen, Title } from '../components/ui'
 import { useAuth } from '../store/AuthContext'
 import { apiErrorMessage } from '../api/client'
@@ -21,10 +24,11 @@ const CREDENTIALS: Record<string, { email: string; password: string }> = {
 export default function LoginScreen() {
   const styles = useStyles()
   const { colors } = useTheme()
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { login } = useAuth()
-  const [email, setEmail] = useState(__DEV__ ? CREDENTIALS.admin.email : '')
-  const [password, setPassword] = useState(__DEV__ ? CREDENTIALS.admin.password : '')
-  const [demo, setDemo] = useState<'admin' | 'manager' | 'user'>('admin')
+  const [email, setEmail] = useState(__DEV__ ? CREDENTIALS.user.email : '')
+  const [password, setPassword] = useState(__DEV__ ? CREDENTIALS.user.password : '')
+  const [demo, setDemo] = useState<'admin' | 'manager' | 'user'>('user')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -74,6 +78,9 @@ export default function LoginScreen() {
         />
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <AppButton label={loading ? 'Signing in…' : 'Sign in'} onPress={submit} loading={loading} />
+        <Pressable onPress={() => navigation.navigate('Register')} accessibilityRole="link">
+          <Text style={styles.link}>New to ParkSense? Create an account</Text>
+        </Pressable>
       </Card>
 
       {__DEV__ ? (
@@ -101,5 +108,6 @@ const useStyles = makeStyles((colors) => StyleSheet.create({
   },
   logoText: { color: '#fff', fontSize: 32, fontWeight: '800' },
   error: { color: colors.danger, fontSize: 13 },
+  link: { color: colors.text, fontWeight: '600', textAlign: 'center', paddingVertical: spacing.sm },
   footer: { color: colors.textSecondary, fontSize: 12, textAlign: 'center', marginTop: spacing.lg },
 }))

@@ -1,7 +1,16 @@
 import axios from 'axios'
+import { TOKEN_KEY } from './client'
 
 const VISION_BASE =
   import.meta.env.VITE_VISION_URL ?? (import.meta.env.DEV ? 'http://localhost:8001' : '/vision')
+
+/** The vision service verifies the same JWT as the API and only serves staff accounts. */
+const vision = axios.create({ baseURL: VISION_BASE, timeout: 120000 })
+vision.interceptors.request.use((config) => {
+  const token = localStorage.getItem(TOKEN_KEY)
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
 
 export interface ProposedSlot {
   id: string
@@ -57,7 +66,7 @@ export async function proposeSlots(
   if (options.roi) {
     form.append('roi', options.roi)
   }
-  const { data } = await axios.post<ProposeResult>(`${VISION_BASE}/slots/propose`, form)
+  const { data } = await vision.post<ProposeResult>('/slots/propose', form)
   return data
 }
 
@@ -76,12 +85,12 @@ export async function detectOccupancy(
   if (threshold != null) {
     form.append('threshold', String(threshold))
   }
-  const { data } = await axios.post<DetectResult>(`${VISION_BASE}/occupancy/detect`, form)
+  const { data } = await vision.post<DetectResult>('/occupancy/detect', form)
   return data
 }
 
 export async function visionHealth(): Promise<{ status: string; backend: string }> {
-  const { data } = await axios.get<{ status: string; backend: string }>(`${VISION_BASE}/health`)
+  const { data } = await vision.get<{ status: string; backend: string }>('/health')
   return data
 }
 
@@ -97,21 +106,24 @@ export interface SurveyProfile {
 
 export const surveyVisionApi = {
   profiles: async () =>
-    (await axios.get<SurveyProfile[]>(`${VISION_BASE}/survey/profiles`)).data,
+    (await vision.get<SurveyProfile[]>('/survey/profiles')).data,
   uploadBundle: async (file: File, profile?: string) => {
     const form = new FormData()
     form.append('file', file)
     if (profile) form.append('profile', profile)
-    return (await axios.post(`${VISION_BASE}/surveys`, form)).data
+    return (await vision.post('/surveys', form)).data
   },
   getSurvey: async (jobId: string) =>
-    (await axios.get(`${VISION_BASE}/surveys/${jobId}`)).data,
+    (await vision.get(`/surveys/${jobId}`)).data,
+  /** Used in <img>/<a> tags, which cannot send headers, so the token rides in the query string. */
   artifactUrl: (jobId: string, name: string) =>
-    `${VISION_BASE}/surveys/${jobId}/artifacts/${name}`,
+    `${VISION_BASE}/surveys/${jobId}/artifacts/${name}?access_token=${encodeURIComponent(
+      localStorage.getItem(TOKEN_KEY) ?? '',
+    )}`,
   relayout: async (jobId: string, profile: string) => {
     const form = new FormData()
     form.append('profile', profile)
-    return (await axios.post(`${VISION_BASE}/surveys/${jobId}/layout`, form)).data
+    return (await vision.post(`/surveys/${jobId}/layout`, form)).data
   },
 }
 

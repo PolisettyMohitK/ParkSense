@@ -155,13 +155,14 @@ public class DemoDataSeeder implements ApplicationRunner {
 
         Instant now = Instant.now();
 
-        // Upcoming booking: the space is only held (RESERVED) once the hold window opens.
+        // Upcoming booking tomorrow, so the demo driver can still book "now" with the same car.
+        // The space is only held (RESERVED) once the hold window opens.
         ParkingSpace reservedSpace = level1Spaces.get(0);
         reservationRepository.save(Reservation.builder()
                 .code("RES-DEMO0001").user(driver).vehicle(car).zone(level1)
                 .assignedSpace(reservedSpace).status(ReservationStatus.CONFIRMED)
-                .startTime(now.plus(1, ChronoUnit.HOURS))
-                .endTime(now.plus(3, ChronoUnit.HOURS))
+                .startTime(now.plus(1, ChronoUnit.DAYS))
+                .endTime(now.plus(1, ChronoUnit.DAYS).plus(2, ChronoUnit.HOURS))
                 .build());
 
         occupancyService.recordEvent(new OccupancyEventRequest(

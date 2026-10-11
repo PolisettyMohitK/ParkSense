@@ -131,7 +131,7 @@ export default function SurveyReviewPage() {
     enabled: Boolean(siteId),
   })
 
-  const surveys = surveysQuery.data ?? []
+  const surveys = useMemo(() => surveysQuery.data ?? [], [surveysQuery.data])
 
   // Default to first survey if none selected
   useEffect(() => {
@@ -186,11 +186,18 @@ export default function SurveyReviewPage() {
     mutationFn: async (profileKey: string) => {
       if (!activeSurvey?.surveyJobId) throw new Error('No survey job ID available')
       const updatedJob = await surveyVisionApi.relayout(activeSurvey.surveyJobId, profileKey)
-      return updatedJob
+      // Persist the regenerated layout as a new survey revision so it can be reviewed and imported.
+      return surveysApi.create(Number(siteId), {
+        surveyJobId: activeSurvey.surveyJobId,
+        profile: profileKey,
+        layoutJson: JSON.stringify(updatedJob.result?.layout ?? {}),
+        reportJson: JSON.stringify(updatedJob.result ?? {}),
+      })
     },
-    onSuccess: () => {
-      enqueueSnackbar('Layout regenerated with new profile', { variant: 'success' })
+    onSuccess: (saved) => {
+      enqueueSnackbar('Layout regenerated and saved as a new revision', { variant: 'success' })
       queryClient.invalidateQueries({ queryKey: ['surveys', siteId] })
+      setSelectedSurveyId(saved.id)
     },
     onError: (err) => enqueueSnackbar(apiErrorMessage(err), { variant: 'error' }),
   })
@@ -581,7 +588,7 @@ function ThreeTerrainViewer({
     const container = mountRef.current
     if (!container) return
 
-    const width = container.clientWidth || 800
+    let width = container.clientWidth || 800
     const height = 480
 
     const scene = new THREE.Scene()
@@ -657,18 +664,17 @@ function ThreeTerrainViewer({
     terrainMesh.position.set(lengthM / 2, 0, breadthM / 2)
     scene.add(terrainMesh)
 
-    // Add 3D Parking Bays
+    // Add 3D Parking Bays - one shared geometry and material for every bay.
+    const bayGeo = new THREE.BoxGeometry(2.3, 0.05, 4.8)
+    const bayMat = new THREE.MeshStandardMaterial({
+      color: 0x1a7f37, // Apple free status green
+      roughness: 0.3,
+      metalness: 0.1,
+    })
     if (layout?.bays) {
       layout.bays.forEach((bay) => {
         const [cx, cy] = bay.centre
         const bayZ = (cx) * globalSlope + 0.08
-
-        const bayGeo = new THREE.BoxGeometry(2.3, 0.05, 4.8)
-        const bayMat = new THREE.MeshStandardMaterial({
-          color: 0x1a7f37, // Apple free status green
-          roughness: 0.3,
-          metalness: 0.1,
-        })
         const bayMesh = new THREE.Mesh(bayGeo, bayMat)
         bayMesh.position.set(cx, bayZ, cy)
         bayMesh.rotation.y = (bay.angleDeg * Math.PI) / 180
@@ -676,56 +682,80 @@ function ThreeTerrainViewer({
       })
     }
 
-    // Animation loop & basic rotation interaction
-    let animationId: number
+    // Render on demand (drag, zoom, resize) instead of every frame, so an idle tab costs nothing.
+    let frame = 0
+    const requestRender = () => {
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        renderer.render(scene, camera)
+      })
+    }
+
+    // Pointer events cover mouse, pen and touch.
     let isDragging = false
-    let previousMousePosition = { x: 0, y: 0 }
-
-    const onMouseDown = (e: MouseEvent) => {
+    let previous = { x: 0, y: 0 }
+    const onPointerDown = (e: PointerEvent) => {
       isDragging = true
-      previousMousePosition = { x: e.clientX, y: e.clientY }
+      previous = { x: e.clientX, y: e.clientY }
+      container.setPointerCapture(e.pointerId)
     }
-
-    const onMouseMove = (e: MouseEvent) => {
+    const onPointerMove = (e: PointerEvent) => {
       if (!isDragging) return
-      const deltaX = e.clientX - previousMousePosition.x
-      const deltaY = e.clientY - previousMousePosition.y
-
-      scene.rotation.y += deltaX * 0.008
-      camera.position.y = Math.max(5, camera.position.y + deltaY * 0.05)
-
-      previousMousePosition = { x: e.clientX, y: e.clientY }
+      scene.rotation.y += (e.clientX - previous.x) * 0.008
+      camera.position.y = Math.max(5, camera.position.y + (e.clientY - previous.y) * 0.05)
+      camera.lookAt(10, 0, 6)
+      previous = { x: e.clientX, y: e.clientY }
+      requestRender()
     }
-
-    const onMouseUp = () => {
+    const onPointerUp = (e: PointerEvent) => {
       isDragging = false
+      if (container.hasPointerCapture(e.pointerId)) container.releasePointerCapture(e.pointerId)
     }
-
     const onWheel = (e: WheelEvent) => {
-      camera.position.multiplyScalar(e.deltaY > 0 ? 1.05 : 0.95)
       e.preventDefault()
+      camera.position.multiplyScalar(e.deltaY > 0 ? 1.05 : 0.95)
+      requestRender()
     }
 
-    container.addEventListener('mousedown', onMouseDown)
-    window.addEventListener('mousemove', onMouseMove)
-    window.addEventListener('mouseup', onMouseUp)
-    container.addEventListener('wheel', onWheel)
+    container.style.touchAction = 'none'
+    container.addEventListener('pointerdown', onPointerDown)
+    container.addEventListener('pointermove', onPointerMove)
+    container.addEventListener('pointerup', onPointerUp)
+    container.addEventListener('pointercancel', onPointerUp)
+    container.addEventListener('wheel', onWheel, { passive: false })
 
-    const animate = () => {
-      animationId = requestAnimationFrame(animate)
-      renderer.render(scene, camera)
-    }
-    animate()
+    const resizeObserver = new ResizeObserver(() => {
+      const next = container.clientWidth
+      if (!next || next === width) return
+      width = next
+      camera.aspect = width / height
+      camera.updateProjectionMatrix()
+      renderer.setSize(width, height)
+      requestRender()
+    })
+    resizeObserver.observe(container)
+    requestRender()
 
     return () => {
-      cancelAnimationFrame(animationId)
-      container.removeEventListener('mousedown', onMouseDown)
-      window.removeEventListener('mousemove', onMouseMove)
-      window.removeEventListener('mouseup', onMouseUp)
+      cancelAnimationFrame(frame)
+      resizeObserver.disconnect()
+      container.removeEventListener('pointerdown', onPointerDown)
+      container.removeEventListener('pointermove', onPointerMove)
+      container.removeEventListener('pointerup', onPointerUp)
+      container.removeEventListener('pointercancel', onPointerUp)
       container.removeEventListener('wheel', onWheel)
       if (renderer.domElement && container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement)
       }
+      // Free GPU memory: every geometry and material created for this scene.
+      scene.traverse((object) => {
+        const mesh = object as THREE.Mesh
+        mesh.geometry?.dispose()
+        const material = mesh.material as THREE.Material | THREE.Material[] | undefined
+        if (Array.isArray(material)) material.forEach((m) => m.dispose())
+        else material?.dispose()
+      })
       renderer.dispose()
     }
   }, [report, layout, isDark, wireframe])

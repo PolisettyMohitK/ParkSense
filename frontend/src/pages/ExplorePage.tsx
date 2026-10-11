@@ -1,4 +1,4 @@
-import { useDeferredValue, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -23,10 +23,13 @@ import PlacePhotoSlideshow from '../components/PlacePhotoSlideshow'
 import { placesApi, CATEGORY_LABEL } from '../api/places'
 import { queryKeys } from '../api/queryKeys'
 import { useOccupancyStream } from '../hooks/useOccupancyStream'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { useUserLocation } from '../hooks/useUserLocation'
+import ActiveStayCard from '../components/ActiveStayCard'
+import { apiErrorMessage } from '../api/client'
+import { formatMoney } from '../utils/format'
 import { useAppSelector } from '../store/hooks'
 import type { PlaceCategory } from '../types'
-
-const HYDERABAD_CENTER = { latitude: 17.4325, longitude: 78.4072 }
 
 const CATEGORIES: { value: PlaceCategory | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'All' },
@@ -70,8 +73,8 @@ function summaryLine(place: {
   const isPaid = place.hourlyRate != null && Number(place.hourlyRate) > 0
   return [
     place.category ? CATEGORY_LABEL[place.category] : 'Parking',
-    place.distanceKm != null ? `${place.distanceKm.toFixed(2)} km` : null,
-    isPaid ? `₹${Number(place.hourlyRate).toFixed(0)}/hr` : 'Free parking',
+    place.distanceKm != null ? `${place.distanceKm.toFixed(1)} km` : null,
+    isPaid ? `${formatMoney(Number(place.hourlyRate))}/hr` : 'Free parking',
   ]
     .filter(Boolean)
     .join(' · ')
@@ -81,13 +84,13 @@ export default function ExplorePage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const user = useAppSelector((state) => state.auth.user)
+  const coords = useUserLocation()
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<PlaceCategory | 'ALL'>('ALL')
   const [sort, setSort] = useState<Sort>('DISTANCE')
-  const [coords] = useState(HYDERABAD_CENTER)
   const [hoveredSiteId, setHoveredSiteId] = useState<number | null>(null)
-  // Keeps typing responsive while the list re-queries on every keystroke.
-  const deferredQuery = useDeferredValue(query)
+  // Wait for a pause in typing before querying the server.
+  const deferredQuery = useDebouncedValue(query, 300)
 
   const placesQuery = useQuery({
     queryKey: queryKeys.places.list({
@@ -103,6 +106,7 @@ export default function ExplorePage() {
         q: deferredQuery.trim() || undefined,
         category: category === 'ALL' ? undefined : category,
       }),
+    placeholderData: (previous) => previous,
   })
 
   useOccupancyStream(
@@ -128,9 +132,15 @@ export default function ExplorePage() {
   return (
     <Box>
       <PageHeader
-        title={`Parking near ${user?.organizationName ?? 'MG Road'}`}
-        subtitle="Every registered place, sorted by proximity."
+        title={coords.precise ? 'Parking near you' : 'Parking in Hyderabad'}
+        subtitle={
+          coords.precise
+            ? 'Live availability at places around you, nearest first.'
+            : `Live availability across the city${user ? `, ${user.fullName.split(' ')[0]}` : ''}. Allow location access to sort by distance from you.`
+        }
       />
+
+      {user?.role === 'USER' && <ActiveStayCard />}
 
       <Stack spacing={2} sx={{ mb: 3 }}>
         <TextField
@@ -201,11 +211,7 @@ export default function ExplorePage() {
       ) : placesQuery.isError ? (
         <ErrorState
           title="Failed to load places"
-          subtitle={
-            placesQuery.error instanceof Error
-              ? placesQuery.error.message
-              : 'Could not connect to the server. Please verify your connection.'
-          }
+          subtitle={apiErrorMessage(placesQuery.error)}
           onRetry={() => placesQuery.refetch()}
         />
       ) : places.length === 0 ? (
@@ -257,8 +263,10 @@ export default function ExplorePage() {
                     >
                       <Box sx={{ position: 'relative' }}>
                         <PlacePhotoSlideshow
+                          photos={place.photoUrls}
                           coverImageUrl={place.coverImageUrl}
                           height={180}
+                          autoPlay={false}
                           isHovered={isHovered}
                         />
 

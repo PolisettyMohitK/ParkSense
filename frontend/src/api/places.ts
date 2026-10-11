@@ -1,5 +1,5 @@
 import { client } from './client'
-import type { PlaceCategory, PlaceDetail, PlaceSummary, PublicSpace, PublicZone } from '../types'
+import type { PlaceCategory, PlaceDetail, PlaceSummary, PriceQuote, PublicSpace, PublicZone } from '../types'
 
 export const placesApi = {
   search: async (params: { lat?: number; lng?: number; q?: string; category?: PlaceCategory }) =>
@@ -10,6 +10,8 @@ export const placesApi = {
     (await client.get<PublicZone[]>(`/places/${siteId}/zones`)).data,
   spaces: async (siteId: number, zoneId: number) =>
     (await client.get<PublicSpace[]>(`/places/${siteId}/zones/${zoneId}/spaces`)).data,
+  quote: async (siteId: number, start: string, end: string) =>
+    (await client.get<PriceQuote>(`/places/${siteId}/quote`, { params: { start, end } })).data,
 }
 
 export const AMENITY_LABEL: Record<string, string> = {

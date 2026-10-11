@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactElement } from 'react'
+import { Suspense, useEffect, useState, type ReactElement } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   AppBar,
@@ -40,11 +40,14 @@ import LightModeRoundedIcon from '@mui/icons-material/LightModeRounded'
 import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded'
 import BrightnessAutoRoundedIcon from '@mui/icons-material/BrightnessAutoRounded'
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded'
+import AccountCircleRoundedIcon from '@mui/icons-material/AccountCircleRounded'
 import { motion } from 'framer-motion'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { logout } from '../store/authSlice'
-import { disconnectSocket } from '../websocket/socket'
+import { connectSocket, disconnectSocket, isSocketConnected } from '../websocket/socket'
+import ErrorBoundary from '../components/ErrorBoundary'
+import LoadingState from '../components/LoadingState'
 import { useColorMode } from '../theme/ColorModeProvider'
 import type { AppearancePreference } from '../theme'
 
@@ -91,6 +94,11 @@ const STAFF_NAV: { heading: string; items: NavItem[] }[] = [
   },
 ]
 
+const ACCOUNT_NAV: { heading: string; items: NavItem[] } = {
+  heading: 'Account',
+  items: [{ label: 'Profile & payments', to: '/profile', icon: <AccountCircleRoundedIcon /> }],
+}
+
 const DRIVER_NAV: { heading: string; items: NavItem[] }[] = [
   {
     heading: 'Discover',
@@ -113,7 +121,7 @@ export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [appearanceAnchor, setAppearanceAnchor] = useState<null | HTMLElement>(null)
-  const [connected, setConnected] = useState(false)
+  const [connected, setConnected] = useState(isSocketConnected)
   const user = useAppSelector((state) => state.auth.user)
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
@@ -121,7 +129,12 @@ export default function AppLayout() {
   const { preference, setPreference } = useColorMode()
 
   const isDriver = user?.role === 'USER'
-  const navSections = isDriver ? DRIVER_NAV : STAFF_NAV
+  const navSections = [...(isDriver ? DRIVER_NAV : STAFF_NAV), ACCOUNT_NAV]
+
+  // One realtime connection for the whole signed-in session.
+  useEffect(() => {
+    connectSocket()
+  }, [])
 
   useEffect(() => {
     const handleStatus = (event: Event) => setConnected((event as CustomEvent<boolean>).detail)
@@ -244,7 +257,7 @@ export default function AppLayout() {
                 <MenuRoundedIcon />
               </IconButton>
             )}
-            <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            <Typography variant="h6" sx={{ flexGrow: 1 }} noWrap>
               {titleForPath(location.pathname)}
             </Typography>
             <Stack direction="row" spacing={1.5} alignItems="center">
@@ -259,7 +272,12 @@ export default function AppLayout() {
                   )}
                 </IconButton>
               </Tooltip>
-              <Chip size="small" label={user?.role ?? 'USER'} variant="outlined" />
+              <Chip
+                size="small"
+                label={user?.role === 'USER' ? 'Driver' : user?.role === 'ADMIN' ? 'Admin' : 'Manager'}
+                variant="outlined"
+                sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
+              />
               <IconButton onClick={(event) => setAnchorEl(event.currentTarget)} sx={{ p: 0.5 }}>
                 <Avatar sx={{ width: 36, height: 36, bgcolor: 'primary.main', color: 'primary.contrastText', fontSize: 15 }}>
                   {initials(user?.fullName)}
@@ -307,6 +325,15 @@ export default function AppLayout() {
                   </Typography>
                 </Box>
                 <Divider />
+                <MenuItem
+                  onClick={() => {
+                    setAnchorEl(null)
+                    navigate('/profile')
+                  }}
+                >
+                  <AccountCircleRoundedIcon fontSize="small" sx={{ mr: 1 }} />
+                  Profile & payments
+                </MenuItem>
                 <MenuItem onClick={handleLogout}>
                   <LogoutRoundedIcon fontSize="small" sx={{ mr: 1 }} />
                   Sign out
@@ -323,7 +350,11 @@ export default function AppLayout() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.22, ease: 'easeOut' }}
           >
-            <Outlet />
+            <ErrorBoundary resetKey={location.pathname}>
+              <Suspense fallback={<LoadingState minHeight={360} />}>
+                <Outlet />
+              </Suspense>
+            </ErrorBoundary>
           </motion.div>
         </Box>
       </Box>
@@ -344,6 +375,7 @@ function initials(name?: string) {
 function titleForPath(path: string) {
   if (path.startsWith('/places/')) return 'Place'
   if (path.startsWith('/zones/')) return 'Zone detail'
+  if (path.startsWith('/admin/sites/')) return 'Site survey'
   const map: Record<string, string> = {
     '/dashboard': 'Dashboard',
     '/analytics': 'Analytics',
@@ -357,6 +389,7 @@ function titleForPath(path: string) {
     '/admin/organizations': 'Organizations',
     '/admin/sites': 'Parking sites',
     '/admin/devices': 'Monitoring devices',
+    '/profile': 'Profile',
   }
   return map[path] ?? 'ParkSense'
 }

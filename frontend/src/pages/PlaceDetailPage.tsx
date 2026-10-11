@@ -24,40 +24,55 @@ import PlacePhotoSlideshow from '../components/PlacePhotoSlideshow'
 import { AMENITY_LABEL, CATEGORY_LABEL, placesApi } from '../api/places'
 import { queryKeys } from '../api/queryKeys'
 import { useOccupancyStream } from '../hooks/useOccupancyStream'
-import type { PublicSpace } from '../types'
-
-const HYDERABAD_CENTER = { latitude: 17.4325, longitude: 78.4072 }
+import BookingDialog, { type BookingTarget } from '../components/BookingDialog'
+import NotFoundPage from './NotFoundPage'
+import { apiErrorMessage, apiErrorStatus } from '../api/client'
+import { useUserLocation } from '../hooks/useUserLocation'
+import { formatMoney, parsePositiveInt } from '../utils/format'
+import type { OccupancyChangedEvent, PublicSpace } from '../types'
 
 export default function PlaceDetailPage() {
-  const { siteId } = useParams()
+  const params = useParams()
+  const siteId = parsePositiveInt(params.siteId)
   const navigate = useNavigate()
+  const location = useUserLocation()
   const [activeZoneId, setActiveZoneId] = useState<number | null>(null)
   const [selectedSpace, setSelectedSpace] = useState<PublicSpace | null>(null)
+  const [booking, setBooking] = useState<BookingTarget | null>(null)
+  const coords = { lat: location.latitude, lng: location.longitude }
 
   const placeQuery = useQuery({
-    queryKey: queryKeys.places.detail(Number(siteId), { lat: HYDERABAD_CENTER.latitude, lng: HYDERABAD_CENTER.longitude }),
-    queryFn: () => placesApi.get(Number(siteId), { lat: HYDERABAD_CENTER.latitude, lng: HYDERABAD_CENTER.longitude }),
-    enabled: Boolean(siteId),
+    queryKey: queryKeys.places.detail(siteId ?? 0, coords),
+    queryFn: () => placesApi.get(siteId!, coords),
+    enabled: siteId !== null,
+    placeholderData: (previous) => previous,
   })
 
   const { zones = [] } = placeQuery.data ?? {}
   const currentZone = zones.find((z) => z.id === activeZoneId) ?? zones[0] ?? null
 
   const spacesQuery = useQuery({
-    queryKey: ['place-spaces', siteId, currentZone?.id],
-    queryFn: () => placesApi.spaces(Number(siteId), currentZone!.id),
-    enabled: Boolean(siteId) && currentZone != null,
+    queryKey: queryKeys.places.spaces(siteId ?? 0, currentZone?.id ?? 0),
+    queryFn: () => placesApi.spaces(siteId!, currentZone!.id),
+    enabled: siteId !== null && currentZone != null,
   })
 
+  // Only react to changes in this venue's areas.
+  const zoneIds = new Set(zones.map((zone) => zone.id))
   useOccupancyStream(
-    () => {
+    (event: OccupancyChangedEvent) => {
+      if (!zoneIds.has(event.zoneId)) return
       placeQuery.refetch()
-      if (currentZone != null) {
+      if (currentZone != null && event.zoneId === currentZone.id) {
         spacesQuery.refetch()
       }
     },
     { debounceMs: 400 }
   )
+
+  if (siteId === null || apiErrorStatus(placeQuery.error) === 404) {
+    return <NotFoundPage />
+  }
 
   if (placeQuery.isLoading) {
     return <PlaceDetailSkeleton />
@@ -67,7 +82,7 @@ export default function PlaceDetailPage() {
     return (
       <ErrorState
         title="Failed to load place"
-        subtitle={placeQuery.error instanceof Error ? placeQuery.error.message : 'Please check your connection.'}
+        subtitle={apiErrorMessage(placeQuery.error)}
         onRetry={() => placeQuery.refetch()}
       />
     )
@@ -101,6 +116,8 @@ export default function PlaceDetailPage() {
 
       <Card sx={{ overflow: 'hidden', mb: 3 }}>
         <PlacePhotoSlideshow
+          photos={summary.photoUrls}
+          alt={`Photos of ${summary.name}`}
           coverImageUrl={summary.coverImageUrl}
           height={{ xs: 220, md: 340 }}
           autoPlayIntervalMs={4500}
@@ -112,7 +129,7 @@ export default function PlaceDetailPage() {
             </Typography>
             {summary.category ? <Chip label={CATEGORY_LABEL[summary.category]} size="small" /> : null}
             <Chip
-              label={isPaid ? `₹${Number(summary.hourlyRate).toFixed(0)}/hr` : 'Free / Customer parking'}
+              label={isPaid ? `${formatMoney(Number(summary.hourlyRate))}/hr` : 'Free for visitors'}
               color={isPaid ? 'default' : 'success'}
               size="small"
               sx={{ fontWeight: 600 }}
@@ -122,9 +139,13 @@ export default function PlaceDetailPage() {
             {[summary.organizationName, summary.address, summary.city].filter(Boolean).join(' · ')}
           </Typography>
           <Stack direction="row" spacing={2} sx={{ mt: 1, color: 'text.secondary' }} flexWrap="wrap" useFlexGap>
-            {summary.distanceKm != null ? <Typography variant="body2">{summary.distanceKm.toFixed(2)} km away</Typography> : null}
+            {summary.distanceKm != null ? (
+              <Typography variant="body2">
+                {summary.distanceKm.toFixed(1)} km {location.precise ? 'away' : 'from city centre'}
+              </Typography>
+            ) : null}
             <Typography variant="body2">
-              {isPaid ? `₹${Number(summary.hourlyRate).toFixed(0)}/hr` : 'Free parking'}
+              {isPaid ? `${formatMoney(Number(summary.hourlyRate))}/hr` : 'Free parking'}
             </Typography>
             {summary.openingHours ? <Typography variant="body2">{summary.openingHours}</Typography> : null}
           </Stack>
@@ -138,18 +159,26 @@ export default function PlaceDetailPage() {
               <Chip key={amenity} label={AMENITY_LABEL[amenity] ?? amenity} size="small" variant="outlined" />
             ))}
           </Stack>
-          {mapsUrl ? (
+          <Stack direction="row" spacing={1.5} sx={{ mt: 2 }} flexWrap="wrap" useFlexGap>
             <Button
-              sx={{ mt: 2 }}
-              variant="outlined"
-              startIcon={<DirectionsRoundedIcon />}
-              href={mapsUrl}
-              target="_blank"
-              rel="noreferrer"
+              variant="contained"
+              disabled={zones.length === 0}
+              onClick={() => setBooking({ siteId, zoneId: currentZone?.id ?? null })}
             >
-              Directions
+              Reserve a bay
             </Button>
-          ) : null}
+            {mapsUrl ? (
+              <Button
+                variant="outlined"
+                startIcon={<DirectionsRoundedIcon />}
+                href={mapsUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Directions
+              </Button>
+            ) : null}
+          </Stack>
         </Box>
       </Card>
 
@@ -194,7 +223,7 @@ export default function PlaceDetailPage() {
                     Tariff
                   </Typography>
                   <Typography variant="subtitle2">
-                    {isPaid ? `₹${Number(summary.hourlyRate).toFixed(0)}/hr` : 'Free'}
+                    {isPaid ? `${formatMoney(Number(summary.hourlyRate))}/hr` : 'Free'}
                   </Typography>
                 </Box>
               </Stack>
@@ -206,9 +235,11 @@ export default function PlaceDetailPage() {
               </Typography>
               <Stack spacing={1.25}>
                 {[
-                  isPaid ? 'Select your desired bay from the 2.5D lot map.' : 'Complimentary customer parking for patrons.',
-                  'Choose your vehicle and reservation arrival time.',
-                  'Automated barrier recognition verifies your entry upon arrival.',
+                  'Pick a free bay on the lot map, or let us auto-assign one.',
+                  isPaid
+                    ? `Choose your vehicle and time - you see the price before you book (${formatMoney(Number(summary.hourlyRate))} per started hour).`
+                    : 'Choose your vehicle and time - parking here is free for visitors.',
+                  'Check in from My parking when you arrive (up to 15 minutes early); check out when you leave.',
                 ].map((line, index) => (
                   <Stack key={line} direction="row" spacing={1.25} alignItems="flex-start">
                     <Box
@@ -270,12 +301,8 @@ export default function PlaceDetailPage() {
             <ParkingLot3DViewer
               spaces={spaces}
               selectedSpaceId={selectedSpace?.id ?? null}
-              onSelectSpace={(space) => {
-                setSelectedSpace(space)
-                navigate(
-                  `/reservations?siteId=${siteId}&zoneId=${currentZone?.id}&spaceId=${space.id}`
-                )
-              }}
+              onSelectSpace={(space) => setSelectedSpace(space)}
+              onConfirm={(space) => setBooking({ siteId, zoneId: currentZone?.id ?? null, spaceId: space.id })}
               isLoading={spacesQuery.isLoading}
               zoneName={currentZone?.name ?? 'Main Lot'}
             />
@@ -321,15 +348,24 @@ export default function PlaceDetailPage() {
                           </Typography>
                         </Stack>
                       </Box>
-                      <Button
-                        variant={currentZone?.id === zone.id ? 'outlined' : 'text'}
-                        onClick={() => {
-                          setActiveZoneId(zone.id)
-                          setSelectedSpace(null)
-                        }}
-                      >
-                        {currentZone?.id === zone.id ? 'Viewing lot map' : 'View map'}
-                      </Button>
+                      <Stack direction="row" spacing={1}>
+                        <Button
+                          variant={currentZone?.id === zone.id ? 'outlined' : 'text'}
+                          onClick={() => {
+                            setActiveZoneId(zone.id)
+                            setSelectedSpace(null)
+                          }}
+                        >
+                          {currentZone?.id === zone.id ? 'Viewing lot map' : 'View map'}
+                        </Button>
+                        <Button
+                          variant="contained"
+                          disabled={zone.availableSpaces === 0}
+                          onClick={() => setBooking({ siteId, zoneId: zone.id })}
+                        >
+                          Reserve
+                        </Button>
+                      </Stack>
                     </Stack>
                   ))}
                 </Stack>
@@ -338,6 +374,15 @@ export default function PlaceDetailPage() {
           </Stack>
         </Grid>
       </Grid>
+      <BookingDialog
+        open={booking !== null}
+        initial={booking ?? undefined}
+        onClose={() => setBooking(null)}
+        onBooked={() => {
+          setSelectedSpace(null)
+          navigate('/reservations')
+        }}
+      />
     </Box>
   )
 }

@@ -31,8 +31,12 @@ import PageHeader from '../components/PageHeader'
 import StatCard from '../components/StatCard'
 import LoadingState from '../components/LoadingState'
 import StatusChip from '../components/StatusChip'
-import { zonesApi, spacesApi } from '../api/parking'
-import { reservationsApi } from '../api/reservations'
+import { zonesApi } from '../api/parking'
+import { analyticsApi } from '../api/analytics'
+import { apiErrorMessage } from '../api/client'
+import { queryKeys } from '../api/queryKeys'
+import ErrorState from '../components/ErrorState'
+import { useQueryClient } from '@tanstack/react-query'
 import { useOccupancyStream } from '../hooks/useOccupancyStream'
 import type { OccupancyChangedEvent } from '../types'
 import { formatDistanceToNow } from 'date-fns'
@@ -42,46 +46,74 @@ export default function DashboardPage() {
   const theme = useTheme()
   const [liveEvents, setLiveEvents] = useState<OccupancyChangedEvent[]>([])
 
-  const zonesQuery = useQuery({ queryKey: ['zones'], queryFn: () => zonesApi.list() })
-  const spacesQuery = useQuery({ queryKey: ['spaces'], queryFn: () => spacesApi.list() })
-  const reservationsQuery = useQuery({ queryKey: ['reservations'], queryFn: () => reservationsApi.list() })
+  const queryClient = useQueryClient()
+  const zonesQuery = useQuery({ queryKey: queryKeys.zones.list(), queryFn: () => zonesApi.list() })
+  const summaryQuery = useQuery({ queryKey: queryKeys.analytics.summary, queryFn: analyticsApi.summary })
 
   useOccupancyStream((event) => {
     setLiveEvents((prev) => [event, ...prev].slice(0, 8))
   })
+  // Counts refresh at most every couple of seconds even during bursts of camera events.
+  useOccupancyStream(
+    () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.analytics.summary })
+      queryClient.invalidateQueries({ queryKey: queryKeys.zones.list() })
+    },
+    { debounceMs: 2000 },
+  )
 
-  const zones = zonesQuery.data ?? []
-  const spaces = spacesQuery.data ?? []
-  const reservations = reservationsQuery.data ?? []
+  const zones = useMemo(() => zonesQuery.data ?? [], [zonesQuery.data])
+  const summary = summaryQuery.data
 
-  const stats = useMemo(() => {
-    const totalSpaces = spaces.length
-    const occupied = spaces.filter((space) => space.status === 'OCCUPIED').length
-    const available = spaces.filter((space) => space.status === 'AVAILABLE').length
-    const activeReservations = reservations.filter((reservation) =>
-      ['PENDING', 'CONFIRMED', 'ACTIVE'].includes(reservation.status),
-    ).length
-    return { totalSpaces, occupied, available, activeReservations }
-  }, [spaces, reservations])
+  const stats = {
+    totalSpaces: summary?.spaces ?? 0,
+    occupied: summary?.occupied ?? 0,
+    available: summary?.available ?? 0,
+    activeReservations: summary?.activeReservations ?? 0,
+  }
 
+  // Busiest areas first so the chart stays readable with many venues.
   const occupancyData = useMemo(
     () =>
-      zones.map((zone) => ({
-        name: zone.code,
-        Occupied: zone.occupiedSpaces,
-        Available: zone.availableSpaces,
-      })),
+      [...zones]
+        .filter((zone) => zone.totalSpaces > 0)
+        .sort((a, b) => b.occupiedSpaces / b.totalSpaces - a.occupiedSpaces / a.totalSpaces)
+        .slice(0, 10)
+        .map((zone) => ({
+          name: `${zone.siteName.split(' ')[0]} ${zone.code}`,
+          Occupied: zone.occupiedSpaces,
+          Available: zone.availableSpaces,
+        })),
     [zones],
   )
 
-  const statusData = useMemo(() => {
-    const counts = new Map<string, number>()
-    spaces.forEach((space) => counts.set(space.status, (counts.get(space.status) ?? 0) + 1))
-    return Array.from(counts.entries()).map(([status, value]) => ({ name: status, value }))
-  }, [spaces])
+  const statusData = useMemo(
+    () =>
+      summary
+        ? [
+            { name: 'AVAILABLE', value: summary.available },
+            { name: 'OCCUPIED', value: summary.occupied },
+            { name: 'RESERVED', value: summary.reserved },
+            { name: 'OUT_OF_SERVICE', value: summary.outOfService },
+          ].filter((entry) => entry.value > 0)
+        : [],
+    [summary],
+  )
 
-  if (zonesQuery.isLoading || spacesQuery.isLoading) {
+  if (zonesQuery.isLoading || summaryQuery.isLoading) {
     return <LoadingState minHeight={400} />
+  }
+
+  if (zonesQuery.isError || summaryQuery.isError) {
+    return (
+      <ErrorState
+        subtitle={apiErrorMessage(zonesQuery.error ?? summaryQuery.error)}
+        onRetry={() => {
+          zonesQuery.refetch()
+          summaryQuery.refetch()
+        }}
+      />
+    )
   }
 
   return (
@@ -205,7 +237,7 @@ export default function DashboardPage() {
                     <Box key={zone.id}>
                       <Stack direction="row" justifyContent="space-between" alignItems="center">
                         <Typography variant="body2" fontWeight={600}>
-                          {zone.name} · {zone.code}
+                          {zone.siteName} · {zone.name}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
                           {zone.occupiedSpaces}/{zone.totalSpaces}

@@ -29,6 +29,9 @@ import { useSnackbar } from 'notistack'
 import PageHeader from '../components/PageHeader'
 import LoadingState from '../components/LoadingState'
 import EmptyState from '../components/EmptyState'
+import ErrorState from '../components/ErrorState'
+import { useConfirm } from '../hooks/useConfirm'
+import { isEmail } from '../utils/validation'
 import { usersApi } from '../api/resources'
 import { organizationsApi } from '../api/parking'
 import { apiErrorMessage } from '../api/client'
@@ -59,6 +62,7 @@ const EMPTY: UserForm = {
 
 export default function UsersPage() {
   const queryClient = useQueryClient()
+  const [confirm, confirmDialog] = useConfirm()
   const { enqueueSnackbar } = useSnackbar()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState<UserForm>(EMPTY)
@@ -119,7 +123,14 @@ export default function UsersPage() {
         title="Users"
         subtitle="Manage accounts, roles and organization membership."
         action={
-          <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => setOpen(true)}>
+          <Button
+            variant="contained"
+            startIcon={<AddRoundedIcon />}
+            onClick={() => {
+              setForm(EMPTY)
+              setOpen(true)
+            }}
+          >
             New user
           </Button>
         }
@@ -127,6 +138,8 @@ export default function UsersPage() {
 
       {usersQuery.isLoading ? (
         <LoadingState />
+      ) : usersQuery.isError ? (
+        <ErrorState subtitle={apiErrorMessage(usersQuery.error)} onRetry={() => usersQuery.refetch()} />
       ) : users.length === 0 ? (
         <EmptyState title="No users" />
       ) : (
@@ -168,7 +181,11 @@ export default function UsersPage() {
                       <EditRoundedIcon fontSize="small" />
                     </IconButton>
                     <Tooltip title="Delete">
-                      <IconButton size="small" color="error" onClick={() => deleteMutation.mutate(user.id)}>
+                      <IconButton size="small" color="error" onClick={async () => {
+                          if (await confirm({ title: 'Delete user?', message: `${user.fullName} (${user.email}) will be removed. Users with bookings or vehicles cannot be deleted - disable them instead.`, confirmLabel: 'Delete' })) {
+                            deleteMutation.mutate(user.id)
+                          }
+                        }}>
                         <DeleteOutlineRoundedIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
@@ -198,6 +215,8 @@ export default function UsersPage() {
               onChange={(event) => setForm({ ...form, email: event.target.value })}
               fullWidth
               required
+              error={form.email.length > 0 && !isEmail(form.email)}
+              helperText={form.email.length > 0 && !isEmail(form.email) ? 'Enter a valid email address' : ' '}
             />
             <TextField
               label={form.id ? 'New password (optional)' : 'Password'}
@@ -260,12 +279,19 @@ export default function UsersPage() {
           <Button
             variant="contained"
             onClick={() => saveMutation.mutate(form)}
-            disabled={!form.fullName || !form.email || saveMutation.isPending}
+            disabled={
+              !form.fullName ||
+              !isEmail(form.email) ||
+              (!form.id && form.password.length < 6) ||
+              (form.password.length > 0 && form.password.length < 6) ||
+              saveMutation.isPending
+            }
           >
             Save
           </Button>
         </DialogActions>
       </Dialog>
+      {confirmDialog}
     </Box>
   )
 }

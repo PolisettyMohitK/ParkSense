@@ -27,6 +27,8 @@ import { useSnackbar } from 'notistack'
 import PageHeader from '../components/PageHeader'
 import LoadingState from '../components/LoadingState'
 import EmptyState from '../components/EmptyState'
+import ErrorState from '../components/ErrorState'
+import { useConfirm } from '../hooks/useConfirm'
 import StatusChip from '../components/StatusChip'
 import { devicesApi } from '../api/resources'
 import { zonesApi } from '../api/parking'
@@ -59,6 +61,7 @@ const EMPTY: DeviceForm = {
 
 export default function DevicesPage() {
   const queryClient = useQueryClient()
+  const [confirm, confirmDialog] = useConfirm()
   const { enqueueSnackbar } = useSnackbar()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState<DeviceForm>(EMPTY)
@@ -134,6 +137,8 @@ export default function DevicesPage() {
 
       {devicesQuery.isLoading ? (
         <LoadingState />
+      ) : devicesQuery.isError ? (
+        <ErrorState subtitle={apiErrorMessage(devicesQuery.error)} onRetry={() => devicesQuery.refetch()} />
       ) : devices.length === 0 ? (
         <EmptyState title="No devices" subtitle="Register a camera or sensor to attach it to a zone." />
       ) : (
@@ -166,7 +171,11 @@ export default function DevicesPage() {
                       <EditRoundedIcon fontSize="small" />
                     </IconButton>
                     <Tooltip title="Delete">
-                      <IconButton size="small" color="error" onClick={() => deleteMutation.mutate(device.id)}>
+                      <IconButton size="small" color="error" onClick={async () => {
+                          if (await confirm({ title: 'Delete device?', message: `${device.name} (${device.code}) will be removed. Devices with recorded events cannot be deleted - deactivate them instead.`, confirmLabel: 'Delete' })) {
+                            deleteMutation.mutate(device.id)
+                          }
+                        }}>
                         <DeleteOutlineRoundedIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
@@ -268,6 +277,7 @@ export default function DevicesPage() {
           </Button>
         </DialogActions>
       </Dialog>
+      {confirmDialog}
     </Box>
   )
 }

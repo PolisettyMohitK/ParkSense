@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
@@ -96,6 +96,12 @@ export default function CameraPage() {
   const [detectResult, setDetectResult] = useState<DetectResult | null>(null)
 
   const previewUrl = useMemo(() => (image ? URL.createObjectURL(image) : null), [image])
+  // Release the blob behind the previous preview when the image changes or the page unmounts.
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+    }
+  }, [previewUrl])
 
   const proposeMutation = useMutation({
     mutationFn: () => proposeSlots(image as File, { mode, rows, cols }),
@@ -126,59 +132,71 @@ export default function CameraPage() {
 
   const importMutation = useMutation({
     mutationFn: async () => {
-      if (!proposeResult) return 0
-      for (const slot of proposeResult.slots) {
-        const centroid = slot.polygon.reduce(
-          (accumulator, point) => ({ x: accumulator.x + point[0], y: accumulator.y + point[1] }),
-          { x: 0, y: 0 },
-        )
-        await spacesApi.create({
-          zoneId: Number(activeZoneId),
-          code: null,
-          label: slot.label,
-          polygon: JSON.stringify(slot.polygon),
-          positionX: centroid.x / slot.polygon.length,
-          positionY: centroid.y / slot.polygon.length,
-          verificationStatus: 'PROPOSED',
-          operationalState: 'IN_SERVICE',
-        })
-      }
-      return proposeResult.slots.length
+      if (!proposeResult) return { created: 0, failed: 0 }
+      const results = await Promise.allSettled(
+        proposeResult.slots.map((slot) => {
+          const centroid = slot.polygon.reduce(
+            (accumulator, point) => ({ x: accumulator.x + point[0], y: accumulator.y + point[1] }),
+            { x: 0, y: 0 },
+          )
+          return spacesApi.create({
+            zoneId: Number(activeZoneId),
+            // Name proposed spaces after the detector's label so they are identifiable on the map.
+            code: slot.label ? `CAM-${slot.label}`.slice(0, 50) : null,
+            label: slot.label,
+            polygon: JSON.stringify(slot.polygon),
+            positionX: centroid.x / slot.polygon.length,
+            positionY: centroid.y / slot.polygon.length,
+            verificationStatus: 'PROPOSED',
+            operationalState: 'IN_SERVICE',
+          })
+        }),
+      )
+      const failed = results.filter((result) => result.status === 'rejected').length
+      return { created: results.length - failed, failed }
     },
-    onSuccess: (count) => {
+    onSuccess: ({ created, failed }) => {
       queryClient.invalidateQueries({ queryKey: ['zones'] })
       queryClient.invalidateQueries({ queryKey: ['spaces'] })
-      enqueueSnackbar(`${count} proposed space(s) created — verify them in the zone view`, {
-        variant: 'success',
-      })
+      enqueueSnackbar(
+        failed === 0
+          ? `${created} proposed space(s) created - verify them in the zone view`
+          : `${created} created, ${failed} failed (duplicate codes?) - verify them in the zone view`,
+        { variant: failed === 0 ? 'success' : 'warning' },
+      )
     },
     onError: (error) => enqueueSnackbar(apiErrorMessage(error), { variant: 'error' }),
   })
 
   const pushMutation = useMutation({
     mutationFn: async () => {
-      if (!detectResult) return 0
+      if (!detectResult) return { pushed: 0, failed: 0 }
       const frameId = `web-${Date.now()}`
-      let pushed = 0
-      for (const detection of detectResult.detections) {
-        if (detection.spaceId == null) continue
-        await occupancyApi.record({
-          spaceId: detection.spaceId,
-          state: detection.state,
-          source: 'CAMERA',
-          confidence: detection.confidence,
-          externalId: `${cameraCode}:${frameId}:${detection.spaceId}`,
-          note: `vision:${detection.method}`,
-        })
-        pushed += 1
-      }
-      return pushed
+      const results = await Promise.allSettled(
+        detectResult.detections
+          .filter((detection) => detection.spaceId != null)
+          .map((detection) =>
+            occupancyApi.record({
+              spaceId: detection.spaceId as number,
+              state: detection.state,
+              source: 'CAMERA',
+              confidence: detection.confidence,
+              externalId: `${cameraCode}:${frameId}:${detection.spaceId}`,
+              note: `vision:${detection.method}`,
+            }),
+          ),
+      )
+      const failed = results.filter((result) => result.status === 'rejected').length
+      return { pushed: results.length - failed, failed }
     },
-    onSuccess: (count) => {
+    onSuccess: ({ pushed, failed }) => {
       queryClient.invalidateQueries({ queryKey: ['spaces'] })
       queryClient.invalidateQueries({ queryKey: ['zones'] })
       queryClient.invalidateQueries({ queryKey: ['sessions'] })
-      enqueueSnackbar(`${count} occupancy event(s) pushed`, { variant: 'success' })
+      enqueueSnackbar(
+        failed === 0 ? `${pushed} occupancy event(s) pushed` : `${pushed} pushed, ${failed} failed`,
+        { variant: failed === 0 ? 'success' : 'warning' },
+      )
     },
     onError: (error) => enqueueSnackbar(apiErrorMessage(error), { variant: 'error' }),
   })

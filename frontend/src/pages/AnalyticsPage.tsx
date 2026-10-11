@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
+  Alert,
   Box,
+  Button,
   Card,
   CardContent,
   Grid,
@@ -30,6 +32,8 @@ import StatCard from '../components/StatCard'
 import LoadingState from '../components/LoadingState'
 import { analyticsApi } from '../api/analytics'
 import { zonesApi } from '../api/parking'
+import { queryKeys } from '../api/queryKeys'
+import { apiErrorMessage } from '../api/client'
 import { useTheme } from '@mui/material/styles'
 import { STATUS } from '../theme'
 
@@ -46,21 +50,33 @@ export default function AnalyticsPage() {
   const isDark = theme.palette.mode === 'dark'
   const statusColors = STATUS[isDark ? 'dark' : 'light']
   const [zoneId, setZoneId] = useState<number | ''>('')
+  const [rangeDays, setRangeDays] = useState<number>(7)
 
-  const zonesQuery = useQuery({ queryKey: ['zones'], queryFn: () => zonesApi.list() })
-  const summaryQuery = useQuery({ queryKey: ['analytics-summary'], queryFn: () => analyticsApi.summary() })
+  // Stable for the life of the selection so the queries do not refetch every render.
+  const params = useMemo(() => {
+    const to = new Date()
+    const from = new Date(to.getTime() - rangeDays * 24 * 3_600_000)
+    return {
+      ...(zoneId === '' ? {} : { zoneId }),
+      from: from.toISOString(),
+      to: to.toISOString(),
+    }
+  }, [zoneId, rangeDays])
+
+  const zonesQuery = useQuery({ queryKey: queryKeys.zones.list(), queryFn: () => zonesApi.list() })
+  const summaryQuery = useQuery({ queryKey: queryKeys.analytics.summary, queryFn: () => analyticsApi.summary() })
   const utilizationQuery = useQuery({
-    queryKey: ['analytics-utilization', zoneId],
-    queryFn: () => analyticsApi.utilization(zoneId === '' ? {} : { zoneId }),
+    queryKey: queryKeys.analytics.utilization({ zoneId: params.zoneId, from: String(rangeDays) }),
+    queryFn: () => analyticsApi.utilization(params),
   })
   const heatmapQuery = useQuery({
-    queryKey: ['analytics-heatmap', zoneId],
-    queryFn: () => analyticsApi.heatmap(zoneId === '' ? {} : { zoneId }),
+    queryKey: queryKeys.analytics.heatmap({ zoneId: params.zoneId, from: String(rangeDays) }),
+    queryFn: () => analyticsApi.heatmap(params),
   })
 
   const summary = summaryQuery.data
-  const utilization = utilizationQuery.data ?? []
-  const heatmap = heatmapQuery.data ?? []
+  const utilization = useMemo(() => utilizationQuery.data ?? [], [utilizationQuery.data])
+  const heatmap = useMemo(() => heatmapQuery.data ?? [], [heatmapQuery.data])
 
   const utilizationChart = useMemo(
     () =>
@@ -81,24 +97,60 @@ export default function AnalyticsPage() {
     <Box>
       <PageHeader
         title="Analytics"
-        subtitle="Utilization trends, peak activity and spatial-temporal heat maps."
+        subtitle="Live totals across all venues, plus activity trends and peak hours (India Standard Time) for the selected area and period."
         action={
-          <TextField
-            select
-            label="Zone"
-            value={zoneId}
-            onChange={(event) => setZoneId(event.target.value === '' ? '' : Number(event.target.value))}
-            sx={{ minWidth: 220 }}
-          >
-            <MenuItem value="">All zones</MenuItem>
-            {(zonesQuery.data ?? []).map((zone) => (
-              <MenuItem key={zone.id} value={zone.id}>
-                {zone.name} ({zone.code})
-              </MenuItem>
-            ))}
-          </TextField>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ width: { xs: '100%', sm: 'auto' } }}>
+            <TextField
+              select
+              label="Area"
+              value={zoneId}
+              onChange={(event) => setZoneId(event.target.value === '' ? '' : Number(event.target.value))}
+              sx={{ minWidth: 240 }}
+            >
+              <MenuItem value="">All areas</MenuItem>
+              {(zonesQuery.data ?? []).map((zone) => (
+                <MenuItem key={zone.id} value={zone.id}>
+                  {zone.siteName} · {zone.name}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              select
+              label="Period"
+              value={rangeDays}
+              onChange={(event) => setRangeDays(Number(event.target.value))}
+              sx={{ minWidth: 150 }}
+            >
+              <MenuItem value={1}>Last 24 hours</MenuItem>
+              <MenuItem value={7}>Last 7 days</MenuItem>
+              <MenuItem value={30}>Last 30 days</MenuItem>
+              <MenuItem value={90}>Last 90 days</MenuItem>
+            </TextField>
+          </Stack>
         }
       />
+
+      {(summaryQuery.isError || utilizationQuery.isError || heatmapQuery.isError) && (
+        <Alert
+          severity="error"
+          sx={{ mb: 2 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              onClick={() => {
+                summaryQuery.refetch()
+                utilizationQuery.refetch()
+                heatmapQuery.refetch()
+              }}
+            >
+              Retry
+            </Button>
+          }
+        >
+          {apiErrorMessage(summaryQuery.error ?? utilizationQuery.error ?? heatmapQuery.error)}
+        </Alert>
+      )}
 
       <Grid container spacing={2.5} sx={{ mb: 3 }}>
         <Grid item xs={12} sm={6} lg={3}>

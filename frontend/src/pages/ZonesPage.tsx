@@ -26,6 +26,7 @@ import { useSnackbar } from 'notistack'
 import { motion } from 'framer-motion'
 import PageHeader from '../components/PageHeader'
 import EmptyState from '../components/EmptyState'
+import ErrorState from '../components/ErrorState'
 import LoadingState from '../components/LoadingState'
 import ConfirmDialog from '../components/ConfirmDialog'
 import { sitesApi, zonesApi } from '../api/parking'
@@ -149,6 +150,8 @@ export default function ZonesPage() {
 
       {zonesQuery.isLoading ? (
         <LoadingState />
+      ) : zonesQuery.isError ? (
+        <ErrorState subtitle={apiErrorMessage(zonesQuery.error)} onRetry={() => zonesQuery.refetch()} />
       ) : zones.length === 0 ? (
         <EmptyState
           title="No parking zones yet"

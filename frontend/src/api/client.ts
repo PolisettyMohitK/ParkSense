@@ -3,10 +3,32 @@ import type { ApiError } from '../types'
 
 export const TOKEN_KEY = 'parksense.token'
 export const USER_KEY = 'parksense.user'
+export const EXPIRES_KEY = 'parksense.expiresAt'
+
+/** REST base. In dev Vite proxies `/api`; in production this is the absolute API URL. */
+export const API_BASE_URL: string = import.meta.env.VITE_API_URL ?? '/api'
+
+/**
+ * Origin that serves the API, websocket and bundled venue photos. Empty when the API is same-origin
+ * (dev proxy / nginx), otherwise e.g. `https://parksense-api.onrender.com`.
+ */
+export const API_ORIGIN: string = /^https?:\/\//.test(API_BASE_URL) ? new URL(API_BASE_URL).origin : ''
+
+/**
+ * Resolve an image path from the API. Bundled venue photos (`/places/...`) ship with the web app
+ * too, so they load from the CDN even while the API is cold; anything else comes from the API origin.
+ */
+export function assetUrl(path: string | null | undefined): string | undefined {
+  if (!path) return undefined
+  if (/^(https?:)?\/\//.test(path) || path.startsWith('data:')) return path
+  const normalized = path.startsWith('/') ? path : `/${path}`
+  return normalized.startsWith('/places/') ? normalized : `${API_ORIGIN}${normalized}`
+}
 
 export const client = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? '/api',
+  baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
+  timeout: 60000, // free-tier hosts can take ~50s to wake up
 })
 
 client.interceptors.request.use((config) => {
@@ -21,14 +43,20 @@ client.interceptors.response.use(
   (response) => response,
   (error: AxiosError<ApiError>) => {
     const url = error.config?.url ?? ''
-    if (error.response?.status === 401 && !url.includes('/auth/login')) {
-      localStorage.removeItem(TOKEN_KEY)
-      localStorage.removeItem(USER_KEY)
-      window.dispatchEvent(new Event('auth:logout'))
+    const isAuthCall = url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/me/password')
+    if (error.response?.status === 401 && !isAuthCall) {
+      clearStoredSession()
+      window.dispatchEvent(new CustomEvent('auth:logout', { detail: { reason: 'expired' } }))
     }
     return Promise.reject(error)
   },
 )
+
+export function clearStoredSession() {
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(USER_KEY)
+  localStorage.removeItem(EXPIRES_KEY)
+}
 
 export function apiErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
@@ -38,7 +66,17 @@ export function apiErrorMessage(error: unknown): string {
         .map(([field, message]) => `${field}: ${message}`)
         .join(', ')
     }
+    if (!error.response) {
+      return error.code === 'ECONNABORTED'
+        ? 'The server took too long to respond. It may be waking up - please try again.'
+        : 'Cannot reach the server. Check your connection and try again.'
+    }
     return data?.message ?? error.message
   }
   return error instanceof Error ? error.message : 'Unexpected error'
+}
+
+/** Status code of a failed request, if any. */
+export function apiErrorStatus(error: unknown): number | undefined {
+  return axios.isAxiosError(error) ? error.response?.status : undefined
 }

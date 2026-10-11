@@ -18,7 +18,6 @@ import ZoomInRoundedIcon from '@mui/icons-material/ZoomInRounded'
 import ZoomOutRoundedIcon from '@mui/icons-material/ZoomOutRounded'
 import RestartAltRoundedIcon from '@mui/icons-material/RestartAltRounded'
 import DirectionsCarFilledRoundedIcon from '@mui/icons-material/DirectionsCarFilledRounded'
-import EvStationRoundedIcon from '@mui/icons-material/EvStationRounded'
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded'
 import type { PublicSpace } from '../types'
 import { STATUS } from '../theme'
@@ -29,6 +28,8 @@ interface ParkingLot3DViewerProps {
   spaces: PublicSpace[]
   selectedSpaceId: number | null
   onSelectSpace: (space: PublicSpace) => void
+  /** Called from the "Reserve bay" banner once a bay is selected. */
+  onConfirm?: (space: PublicSpace) => void
   isLoading?: boolean
   zoneName?: string
 }
@@ -148,6 +149,7 @@ export default function ParkingLot3DViewer({
   spaces,
   selectedSpaceId,
   onSelectSpace,
+  onConfirm,
   isLoading,
   zoneName = 'Main Lot',
 }: ParkingLot3DViewerProps) {
@@ -156,7 +158,7 @@ export default function ParkingLot3DViewer({
 
   const [perspective, setPerspective] = useState<ViewPerspective>('isometric')
   const [zoom, setZoom] = useState<number>(1)
-  const [filter, setFilter] = useState<'ALL' | 'AVAILABLE' | 'EV'>('ALL')
+  const [filter, setFilter] = useState<'ALL' | 'AVAILABLE'>('ALL')
 
   const availableCount = spaces.filter((s) => s.status === 'AVAILABLE').length
   const occupiedCount = spaces.filter((s) => s.status === 'OCCUPIED').length
@@ -165,9 +167,6 @@ export default function ParkingLot3DViewer({
   const filteredSpaces = useMemo(() => {
     if (filter === 'AVAILABLE') {
       return spaces.filter((s) => s.status === 'AVAILABLE')
-    }
-    if (filter === 'EV') {
-      return spaces.filter((s) => s.code?.toUpperCase().includes('E') || s.label?.includes('EV'))
     }
     return spaces
   }, [spaces, filter])
@@ -381,7 +380,7 @@ export default function ParkingLot3DViewer({
             }}
           >
             <span>◄</span>
-            <span>ENTRY · DRIVE AISLE · MAX 10 KM/H</span>
+            <span>ENTRY · DRIVE AISLE</span>
             <span>◄</span>
           </Typography>
         </Box>
@@ -402,11 +401,10 @@ export default function ParkingLot3DViewer({
             py: 4,
           }}
         >
-          {filteredSpaces.map((space, index) => {
+          {filteredSpaces.map((space) => {
             const isFree = space.status === 'AVAILABLE'
             const isOccupied = space.status === 'OCCUPIED'
             const isSelected = selectedSpaceId === space.id
-            const isEV = space.code?.toUpperCase().includes('E') || (index % 5 === 0)
 
             const bgSurface = isFree
               ? 'linear-gradient(180deg, #1A7F37 0%, #15692D 100%)'
@@ -431,11 +429,6 @@ export default function ParkingLot3DViewer({
                     <Typography variant="caption" display="block">
                       {isFree ? '● Available (Click to select)' : `Status: ${space.status}`}
                     </Typography>
-                    {isEV && (
-                      <Typography variant="caption" sx={{ color: '#4EBA6F' }}>
-                        ⚡ EV Fast Charger Equipped
-                      </Typography>
-                    )}
                   </Box>
                 }
                 arrow
@@ -453,6 +446,17 @@ export default function ParkingLot3DViewer({
                   whileTap={isFree ? { scale: 0.96 } : undefined}
                   onClick={() => {
                     if (isFree) onSelectSpace(space)
+                  }}
+                  role="button"
+                  tabIndex={isFree ? 0 : -1}
+                  aria-disabled={!isFree}
+                  aria-pressed={isSelected}
+                  aria-label={`Bay ${space.code ?? space.id}, ${isFree ? 'available' : space.status.toLowerCase().replace('_', ' ')}`}
+                  onKeyDown={(event: React.KeyboardEvent) => {
+                    if (isFree && (event.key === 'Enter' || event.key === ' ')) {
+                      event.preventDefault()
+                      onSelectSpace(space)
+                    }
                   }}
                   sx={{
                     height: 116,
@@ -476,7 +480,7 @@ export default function ParkingLot3DViewer({
                     overflow: 'visible',
                   }}
                 >
-                  {/* Stall Header: Code & EV Icon */}
+                  {/* Stall header: bay code */}
                   <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center">
                     <Typography
                       variant="subtitle2"
@@ -489,7 +493,6 @@ export default function ParkingLot3DViewer({
                     >
                       {space.code ?? `S${space.id}`}
                     </Typography>
-                    {isEV && <EvStationRoundedIcon sx={{ fontSize: 13, color: '#FFFFFF' }} />}
                   </Stack>
 
                   {/* Center Content: Either Parked Vehicle or Subtle Open Stall Silhouette */}
@@ -572,7 +575,7 @@ export default function ParkingLot3DViewer({
                   Selected Bay: {spaces.find((s) => s.id === selectedSpaceId)?.code ?? 'Bay'}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  Ready to reserve · Automated camera barrier guidance included
+                  Free right now · pick your time on the next step
                 </Typography>
               </Box>
             </Stack>
@@ -582,11 +585,11 @@ export default function ParkingLot3DViewer({
               size="small"
               onClick={() => {
                 const sp = spaces.find((s) => s.id === selectedSpaceId)
-                if (sp) onSelectSpace(sp)
+                if (sp) (onConfirm ?? onSelectSpace)(sp)
               }}
               sx={{ alignSelf: { xs: 'stretch', sm: 'auto' } }}
             >
-              Confirm Bay {spaces.find((s) => s.id === selectedSpaceId)?.code ?? ''}
+              Reserve bay {spaces.find((s) => s.id === selectedSpaceId)?.code ?? ''}
             </Button>
           </Box>
         )}

@@ -1,5 +1,6 @@
 import { Client } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
+import { API_ORIGIN, TOKEN_KEY } from '../api/client'
 import type { OccupancyChangedEvent } from '../types'
 
 type Handler = (event: OccupancyChangedEvent) => void
@@ -8,16 +9,29 @@ const handlers = new Set<Handler>()
 let client: Client | null = null
 let connected = false
 
+function setConnected(value: boolean) {
+  if (connected === value) return
+  connected = value
+  window.dispatchEvent(new CustomEvent('ws:status', { detail: value }))
+}
+
+/** Opens the shared STOMP connection (idempotent). Requires a signed-in user. */
 export function connectSocket() {
   if (client) {
     return
   }
+  const token = localStorage.getItem(TOKEN_KEY)
+  if (!token) {
+    return
+  }
   client = new Client({
-    webSocketFactory: () => new SockJS('/ws'),
+    webSocketFactory: () => new SockJS(`${API_ORIGIN}/ws`),
+    connectHeaders: { Authorization: `Bearer ${token}` },
     reconnectDelay: 5000,
+    heartbeatIncoming: 20000,
+    heartbeatOutgoing: 20000,
     onConnect: () => {
-      connected = true
-      window.dispatchEvent(new CustomEvent('ws:status', { detail: true }))
+      setConnected(true)
       client?.subscribe('/topic/occupancy', (message) => {
         try {
           const event = JSON.parse(message.body) as OccupancyChangedEvent
@@ -27,10 +41,9 @@ export function connectSocket() {
         }
       })
     },
-    onDisconnect: () => {
-      connected = false
-      window.dispatchEvent(new CustomEvent('ws:status', { detail: false }))
-    },
+    onDisconnect: () => setConnected(false),
+    onWebSocketClose: () => setConnected(false),
+    onStompError: () => setConnected(false),
   })
   client.activate()
 }
@@ -47,8 +60,7 @@ export function subscribeOccupancy(handler: Handler) {
 }
 
 export function disconnectSocket() {
-  client?.deactivate()
+  void client?.deactivate()
   client = null
-  connected = false
-  window.dispatchEvent(new CustomEvent('ws:status', { detail: false }))
+  setConnected(false)
 }

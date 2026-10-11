@@ -7,7 +7,8 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
   const location = useLocation()
 
   if (!token) {
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />
+    // Keep the query string so deep links like /reservations?zoneId=3 survive the login detour.
+    return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}` }} />
   }
   return <>{children}</>
 }

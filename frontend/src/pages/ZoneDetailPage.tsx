@@ -33,7 +33,12 @@ import LoadingState from '../components/LoadingState'
 import StatusChip from '../components/StatusChip'
 import { spacesApi, zonesApi } from '../api/parking'
 import { occupancyApi } from '../api/occupancy'
-import { apiErrorMessage } from '../api/client'
+import { apiErrorMessage, apiErrorStatus } from '../api/client'
+import { queryKeys } from '../api/queryKeys'
+import { useConfirm } from '../hooks/useConfirm'
+import { parsePositiveInt } from '../utils/format'
+import ErrorState from '../components/ErrorState'
+import NotFoundPage from './NotFoundPage'
 import { useOccupancyStream } from '../hooks/useOccupancyStream'
 import { useAppSelector } from '../store/hooks'
 import type { OperationalState, ParkingSpace, VerificationStatus } from '../types'
@@ -68,7 +73,8 @@ const STATUS_BG: Record<string, string> = {
 
 export default function ZoneDetailPage() {
   const { zoneId } = useParams()
-  const id = Number(zoneId)
+  const parsedId = parsePositiveInt(zoneId)
+  const id = parsedId ?? 0
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { enqueueSnackbar } = useSnackbar()
@@ -79,15 +85,21 @@ export default function ZoneDetailPage() {
   const [form, setForm] = useState<SpaceFormState>(EMPTY_SPACE)
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null)
   const [menuSpace, setMenuSpace] = useState<ParkingSpace | null>(null)
+  const [confirm, confirmDialog] = useConfirm()
 
-  const zoneQuery = useQuery({ queryKey: ['zone', id], queryFn: () => zonesApi.get(id) })
-  const occupancyQuery = useQuery({ queryKey: ['zone-occupancy', id], queryFn: () => zonesApi.occupancy(id) })
-  const spacesQuery = useQuery({ queryKey: ['spaces', id], queryFn: () => spacesApi.list(id) })
+  const enabled = parsedId !== null
+  const zoneQuery = useQuery({ queryKey: queryKeys.zones.detail(id), queryFn: () => zonesApi.get(id), enabled })
+  const occupancyQuery = useQuery({
+    queryKey: queryKeys.zones.occupancy(id),
+    queryFn: () => zonesApi.occupancy(id),
+    enabled,
+  })
+  const spacesQuery = useQuery({ queryKey: queryKeys.spaces.list(id), queryFn: () => spacesApi.list(id), enabled })
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['spaces', id] })
-    queryClient.invalidateQueries({ queryKey: ['zone-occupancy', id] })
-    queryClient.invalidateQueries({ queryKey: ['zones'] })
+    queryClient.invalidateQueries({ queryKey: queryKeys.spaces.list(id) })
+    queryClient.invalidateQueries({ queryKey: queryKeys.zones.all })
+    queryClient.invalidateQueries({ queryKey: queryKeys.places.all })
   }
 
   useOccupancyStream((event) => {
@@ -101,7 +113,7 @@ export default function ZoneDetailPage() {
       occupancyApi.record({ spaceId: payload.spaceId, state: payload.state, source: 'MANUAL' }),
     onSuccess: () => {
       invalidate()
-      queryClient.invalidateQueries({ queryKey: ['occupancy-history'] })
+      queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all })
     },
     onError: (error) => enqueueSnackbar(apiErrorMessage(error), { variant: 'error' }),
   })
@@ -157,8 +169,24 @@ export default function ZoneDetailPage() {
     onError: (error) => enqueueSnackbar(apiErrorMessage(error), { variant: 'error' }),
   })
 
+  if (parsedId === null || apiErrorStatus(zoneQuery.error) === 404) {
+    return <NotFoundPage />
+  }
+
   if (zoneQuery.isLoading || spacesQuery.isLoading) {
     return <LoadingState minHeight={400} />
+  }
+
+  if (zoneQuery.isError || spacesQuery.isError) {
+    return (
+      <ErrorState
+        subtitle={apiErrorMessage(zoneQuery.error ?? spacesQuery.error)}
+        onRetry={() => {
+          zoneQuery.refetch()
+          spacesQuery.refetch()
+        }}
+      />
+    )
   }
 
   const zone = zoneQuery.data
@@ -370,9 +398,20 @@ export default function ZoneDetailPage() {
           </MenuItem>
         )}
         <MenuItem
-          onClick={() => {
-            if (menuSpace) deleteMutation.mutate(menuSpace.id)
+          onClick={async () => {
+            const target = menuSpace
             setMenuAnchor(null)
+            if (
+              target &&
+              (await confirm({
+                title: `Delete space ${target.code ?? ''}?`,
+                message:
+                  'The space is removed permanently. Spaces with occupancy history or bookings cannot be deleted - set them out of service instead.',
+                confirmLabel: 'Delete',
+              }))
+            ) {
+              deleteMutation.mutate(target.id)
+            }
           }}
           sx={{ color: 'error.main' }}
         >
@@ -468,6 +507,7 @@ export default function ZoneDetailPage() {
           </Button>
         </DialogActions>
       </Dialog>
+      {confirmDialog}
     </Box>
   )
 }

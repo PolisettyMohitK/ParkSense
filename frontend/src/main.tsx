@@ -7,13 +7,18 @@ import { BrowserRouter } from 'react-router-dom'
 import { store } from './store'
 import { ColorModeProvider } from './theme/ColorModeProvider'
 import App from './App'
+import { apiErrorStatus } from './api/client'
 import './index.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
-      retry: 1,
+      // Retry only transient failures (network, 5xx); a 4xx will not fix itself.
+      retry: (failureCount, error) => {
+        const status = apiErrorStatus(error)
+        return failureCount < 2 && (status === undefined || status >= 500)
+      },
       staleTime: 15000,
     },
   },

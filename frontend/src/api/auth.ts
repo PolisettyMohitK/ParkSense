@@ -11,7 +11,11 @@ export interface RegisterPayload {
   email: string
   password: string
   phone?: string
-  organizationId?: number
+}
+
+export interface ProfilePayload {
+  fullName: string
+  phone?: string | null
 }
 
 export async function login(payload: LoginPayload): Promise<AuthResponse> {
@@ -27,4 +31,13 @@ export async function register(payload: RegisterPayload): Promise<AuthResponse> 
 export async function me(): Promise<User> {
   const { data } = await client.get<User>('/auth/me')
   return data
+}
+
+export async function updateProfile(payload: ProfilePayload): Promise<User> {
+  const { data } = await client.put<User>('/me', payload)
+  return data
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  await client.post('/me/password', { currentPassword, newPassword })
 }

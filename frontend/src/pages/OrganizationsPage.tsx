@@ -26,6 +26,9 @@ import { useSnackbar } from 'notistack'
 import PageHeader from '../components/PageHeader'
 import LoadingState from '../components/LoadingState'
 import EmptyState from '../components/EmptyState'
+import ErrorState from '../components/ErrorState'
+import { useConfirm } from '../hooks/useConfirm'
+import { isEmail } from '../utils/validation'
 import { organizationsApi } from '../api/parking'
 import { apiErrorMessage } from '../api/client'
 import type { Organization } from '../types'
@@ -44,6 +47,7 @@ const EMPTY: OrgForm = { name: '', code: '', contactEmail: '', contactPhone: '',
 
 export default function OrganizationsPage() {
   const queryClient = useQueryClient()
+  const [confirm, confirmDialog] = useConfirm()
   const { enqueueSnackbar } = useSnackbar()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState<OrgForm>(EMPTY)
@@ -101,7 +105,14 @@ export default function OrganizationsPage() {
         title="Organizations"
         subtitle="Top-level tenants owning sites, zones and users."
         action={
-          <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => setOpen(true)}>
+          <Button
+            variant="contained"
+            startIcon={<AddRoundedIcon />}
+            onClick={() => {
+              setForm(EMPTY)
+              setOpen(true)
+            }}
+          >
             New organization
           </Button>
         }
@@ -109,6 +120,8 @@ export default function OrganizationsPage() {
 
       {orgsQuery.isLoading ? (
         <LoadingState />
+      ) : orgsQuery.isError ? (
+        <ErrorState subtitle={apiErrorMessage(orgsQuery.error)} onRetry={() => orgsQuery.refetch()} />
       ) : orgs.length === 0 ? (
         <EmptyState title="No organizations" />
       ) : (
@@ -139,7 +152,11 @@ export default function OrganizationsPage() {
                       <EditRoundedIcon fontSize="small" />
                     </IconButton>
                     <Tooltip title="Delete">
-                      <IconButton size="small" color="error" onClick={() => deleteMutation.mutate(org.id)}>
+                      <IconButton size="small" color="error" onClick={async () => {
+                          if (await confirm({ title: 'Delete organization?', message: `${org.name} will be removed. Organizations that still have sites or users cannot be deleted - deactivate them instead.`, confirmLabel: 'Delete' })) {
+                            deleteMutation.mutate(org.id)
+                          }
+                        }}>
                         <DeleteOutlineRoundedIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
@@ -198,12 +215,15 @@ export default function OrganizationsPage() {
           <Button
             variant="contained"
             onClick={() => saveMutation.mutate(form)}
-            disabled={!form.name || !form.code || saveMutation.isPending}
+            disabled={
+              !form.name || !form.code || (form.contactEmail !== '' && !isEmail(form.contactEmail)) || saveMutation.isPending
+            }
           >
             Save
           </Button>
         </DialogActions>
       </Dialog>
+      {confirmDialog}
     </Box>
   )
 }

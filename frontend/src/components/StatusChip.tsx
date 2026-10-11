@@ -30,13 +30,26 @@ const DEVICE: Record<string, { label: string; color: Color }> = {
   MAINTENANCE: { label: 'Maintenance', color: 'warning' },
 }
 
-type Kind = 'space' | 'verification' | 'reservation' | 'device'
+const PAYMENT: Record<string, { label: string; color: Color }> = {
+  NOT_REQUIRED: { label: 'Complimentary', color: 'default' },
+  PENDING: { label: 'Payment due', color: 'warning' },
+  PAID: { label: 'Paid', color: 'success' },
+}
+
+const SESSION: Record<string, { label: string; color: Color }> = {
+  ACTIVE: { label: 'Parked now', color: 'success' },
+  COMPLETED: { label: 'Completed', color: 'default' },
+}
+
+type Kind = 'space' | 'verification' | 'reservation' | 'device' | 'payment' | 'session'
 
 const MAPS: Record<Kind, Record<string, { label: string; color: Color }>> = {
   space: SPACE_STATUS,
   verification: VERIFICATION,
   reservation: RESERVATION,
   device: DEVICE,
+  payment: PAYMENT,
+  session: SESSION,
 }
 
 interface StatusChipProps {

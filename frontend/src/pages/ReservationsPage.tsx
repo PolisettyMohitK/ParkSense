@@ -1,18 +1,15 @@
-import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Alert,
   Box,
   Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Divider,
-  MenuItem,
-  Paper,
+  Card,
+  CardContent,
+  Grid,
+  IconButton,
   Stack,
+  Tab,
   Table,
   TableBody,
   TableCell,
@@ -20,10 +17,6 @@ import {
   TableHead,
   TableRow,
   Tabs,
-  Tab,
-  Chip,
-  TextField,
-  IconButton,
   Tooltip,
   Typography,
 } from '@mui/material'
@@ -31,452 +24,555 @@ import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import CancelRoundedIcon from '@mui/icons-material/CancelRounded'
 import TaskAltRoundedIcon from '@mui/icons-material/TaskAltRounded'
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
+import LoginRoundedIcon from '@mui/icons-material/LoginRounded'
+import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded'
+import PaymentsRoundedIcon from '@mui/icons-material/PaymentsRounded'
+import EventAvailableRoundedIcon from '@mui/icons-material/EventAvailableRounded'
 import { useSnackbar } from 'notistack'
 import { format } from 'date-fns'
 import PageHeader from '../components/PageHeader'
 import LoadingState from '../components/LoadingState'
 import EmptyState from '../components/EmptyState'
+import ErrorState from '../components/ErrorState'
 import StatusChip from '../components/StatusChip'
+import BookingDialog, { type BookingTarget } from '../components/BookingDialog'
+import ActiveStayCard from '../components/ActiveStayCard'
+import PaymentDialog from '../components/PaymentDialog'
 import { reservationsApi } from '../api/reservations'
-import { sessionsApi, mySessionsApi } from '../api/sessions'
-import { zonesApi, spacesApi } from '../api/parking'
-import { vehiclesApi, usersApi } from '../api/resources'
+import { mySessionsApi, sessionsApi } from '../api/sessions'
 import { apiErrorMessage } from '../api/client'
+import { queryKeys } from '../api/queryKeys'
 import { useAppSelector } from '../store/hooks'
+import { useConfirm } from '../hooks/useConfirm'
+import { useStayActions } from '../hooks/useStayActions'
+import { formatDuration, formatMoney, parsePositiveInt } from '../utils/format'
+import type { MySession, ParkingSession, PaymentMethod, Reservation } from '../types'
 
-interface ReservationForm {
-  userId: number | ''
-  vehicleId: number | ''
-  zoneId: number | ''
-  assignedSpaceId: number | ''
-  startTime: string
-  endTime: string
+const OPEN_STATUSES = ['PENDING', 'CONFIRMED', 'ACTIVE']
+const CHECK_IN_EARLY_MS = 15 * 60_000
+
+function canCheckIn(reservation: Reservation, now = Date.now()) {
+  return (
+    reservation.status === 'CONFIRMED' &&
+    now >= new Date(reservation.startTime).getTime() - CHECK_IN_EARLY_MS &&
+    now < new Date(reservation.endTime).getTime()
+  )
 }
 
-function toLocalInput(date: Date) {
-  const pad = (value: number) => String(value).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(
-    date.getMinutes(),
-  )}`
-}
-
-const now = new Date()
-const defaultForm: ReservationForm = {
-  userId: '',
-  vehicleId: '',
-  zoneId: '',
-  assignedSpaceId: '',
-  startTime: toLocalInput(now),
-  endTime: toLocalInput(new Date(now.getTime() + 2 * 60 * 60 * 1000)),
+function windowLabel(reservation: Reservation) {
+  const start = new Date(reservation.startTime)
+  const end = new Date(reservation.endTime)
+  const sameDay = start.toDateString() === end.toDateString()
+  return `${format(start, 'EEE dd MMM, HH:mm')} – ${format(end, sameDay ? 'HH:mm' : 'dd MMM HH:mm')}`
 }
 
 export default function ReservationsPage() {
-  const queryClient = useQueryClient()
-  const { enqueueSnackbar } = useSnackbar()
   const currentUser = useAppSelector((state) => state.auth.user)
   const isDriver = currentUser?.role === 'USER'
-  const isStaff = currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER'
-  const [dialogOpen, setDialogOpen] = useState(false)
   const [tab, setTab] = useState<'reservations' | 'sessions'>('reservations')
-  const [form, setForm] = useState<ReservationForm>({ ...defaultForm, userId: currentUser?.id ?? '' })
+  const [bookingTarget, setBookingTarget] = useState<BookingTarget | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
 
+  // Deep link from a place page: /reservations?siteId=..&zoneId=..&spaceId=..
   useEffect(() => {
-    const zoneParam = searchParams.get('zoneId')
-    if (zoneParam) {
-      setForm((previous) => ({ ...previous, zoneId: Number(zoneParam), userId: currentUser?.id ?? '' }))
-      setDialogOpen(true)
+    const siteId = parsePositiveInt(searchParams.get('siteId'))
+    const zoneId = parsePositiveInt(searchParams.get('zoneId'))
+    const spaceId = parsePositiveInt(searchParams.get('spaceId'))
+    if (siteId || zoneId) {
+      setBookingTarget({ siteId, zoneId, spaceId })
       setSearchParams({}, { replace: true })
     }
-  }, [searchParams, setSearchParams, currentUser])
-
-  const reservationsQuery = useQuery({ queryKey: ['reservations'], queryFn: () => reservationsApi.list() })
-  const usersQuery = useQuery({
-    queryKey: ['users'],
-    queryFn: () => usersApi.list(),
-    enabled: currentUser?.role === 'ADMIN',
-  })
-  const vehiclesQuery = useQuery({ queryKey: ['vehicles'], queryFn: () => vehiclesApi.list() })
-  const zonesQuery = useQuery({ queryKey: ['zones'], queryFn: () => zonesApi.list() })
-  const spacesQuery = useQuery({
-    queryKey: ['spaces', form.zoneId],
-    queryFn: () => spacesApi.list(Number(form.zoneId)),
-    enabled: form.zoneId !== '',
-  })
-
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['reservations'] })
-    queryClient.invalidateQueries({ queryKey: ['spaces'] })
-    queryClient.invalidateQueries({ queryKey: ['zones'] })
-  }
-
-  /** Surfaces problems before the round-trip, so the user is not left guessing. */
-  const timeError = (() => {
-    if (!form.startTime || !form.endTime) return 'Pick a start and end time.'
-    const start = new Date(form.startTime).getTime()
-    const end = new Date(form.endTime).getTime()
-    if (Number.isNaN(start) || Number.isNaN(end)) return 'Enter a valid date and time.'
-    if (end <= start) return 'End time must be after the start time.'
-    if (start < Date.now() - 60_000) return 'Start time cannot be in the past.'
-    return null
-  })()
-
-  const hours = (() => {
-    if (timeError) return 0
-    return (new Date(form.endTime).getTime() - new Date(form.startTime).getTime()) / 3_600_000
-  })()
-
-  const selectedZone = (zonesQuery.data ?? []).find((zone) => zone.id === Number(form.zoneId))
-  const selectedVehicle = (vehiclesQuery.data ?? []).find((v) => v.id === Number(form.vehicleId))
-  const selectedSpace = (spacesQuery.data ?? []).find((s) => s.id === Number(form.assignedSpaceId))
-
-  const createMutation = useMutation({
-    mutationFn: (payload: ReservationForm) =>
-      reservationsApi.create({
-        userId: Number(payload.userId),
-        vehicleId: Number(payload.vehicleId),
-        zoneId: Number(payload.zoneId),
-        assignedSpaceId: payload.assignedSpaceId ? Number(payload.assignedSpaceId) : null,
-        startTime: new Date(payload.startTime).toISOString(),
-        endTime: new Date(payload.endTime).toISOString(),
-      }),
-    onSuccess: () => {
-      invalidate()
-      enqueueSnackbar('Reservation created', { variant: 'success' })
-      setDialogOpen(false)
-      setForm({ ...defaultForm, userId: currentUser?.id ?? '' })
-    },
-    onError: (error) => enqueueSnackbar(apiErrorMessage(error), { variant: 'error' }),
-  })
-
-  const actionMutation = useMutation({
-    mutationFn: async ({ id, action }: { id: number; action: 'cancel' | 'complete' | 'delete' }) => {
-      if (action === 'cancel') {
-        await reservationsApi.cancel(id)
-      } else if (action === 'complete') {
-        await reservationsApi.complete(id)
-      } else {
-        await reservationsApi.remove(id)
-      }
-    },
-    onSuccess: () => {
-      invalidate()
-      enqueueSnackbar('Reservation updated', { variant: 'success' })
-    },
-    onError: (error) => enqueueSnackbar(apiErrorMessage(error), { variant: 'error' }),
-  })
-
-  const sessionsQuery = useQuery({
-    queryKey: isDriver ? ['mySessions'] : ['sessions'],
-    queryFn: () => (isDriver ? mySessionsApi.list() : sessionsApi.list()),
-  })
-
-  const reservations = reservationsQuery.data ?? []
-  const sessions = sessionsQuery.data ?? []
+  }, [searchParams, setSearchParams])
 
   return (
     <Box>
       <PageHeader
-        title="Reservations"
-        subtitle="Bookings by zone with optional space assignment. Spaces are auto-assigned when available."
+        title={isDriver ? 'My parking' : 'Reservations'}
+        subtitle={
+          isDriver
+            ? 'Upcoming bookings, check-in and check-out, and your parking history.'
+            : 'All bookings and parking sessions across venues.'
+        }
         action={
-          <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => setDialogOpen(true)}>
-            New reservation
+          <Button variant="contained" startIcon={<AddRoundedIcon />} onClick={() => setBookingTarget({})}>
+            Book parking
           </Button>
         }
       />
 
+      {isDriver && <ActiveStayCard />}
+
       <Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ mb: 2 }}>
-        <Tab value="reservations" label="Reservations" />
-        <Tab value="sessions" label="Sessions" />
+        <Tab value="reservations" label="Bookings" />
+        <Tab value="sessions" label={isDriver ? 'History & payments' : 'Sessions'} />
       </Tabs>
 
       {tab === 'reservations' &&
-        (reservationsQuery.isLoading ? (
-          <LoadingState />
-        ) : reservations.length === 0 ? (
-        <EmptyState
-          title="No reservations"
-          subtitle="Create a reservation to reserve capacity in a zone."
-          action={{ label: 'New reservation', onClick: () => setDialogOpen(true) }}
-        />
-      ) : (
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Code</TableCell>
-                <TableCell>User</TableCell>
-                <TableCell>Vehicle</TableCell>
-                <TableCell>Zone</TableCell>
-                <TableCell>Space</TableCell>
-                <TableCell>Window</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell align="right">Actions</TableCell>
+        (isDriver ? (
+          <DriverBookings onBook={() => setBookingTarget({})} />
+        ) : (
+          <StaffReservations onBook={() => setBookingTarget({})} />
+        ))}
+      {tab === 'sessions' && (isDriver ? <DriverHistory /> : <StaffSessions />)}
+
+      <BookingDialog
+        open={bookingTarget !== null}
+        initial={bookingTarget ?? undefined}
+        onClose={() => setBookingTarget(null)}
+        onBooked={() => setTab('reservations')}
+      />
+    </Box>
+  )
+}
+
+function DriverBookings({ onBook }: { onBook: () => void }) {
+  const navigate = useNavigate()
+  const query = useQuery({ queryKey: queryKeys.reservations.list(), queryFn: () => reservationsApi.list() })
+  const { checkIn, checkOut, paymentDialog } = useStayActions()
+  const cancel = useCancel()
+  const [confirm, confirmDialog] = useConfirm()
+  const [now, setNow] = useState(Date.now())
+
+  // Re-evaluate check-in eligibility as time passes.
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const { upcoming, past } = useMemo(() => {
+    const all = [...(query.data ?? [])].sort(
+      (a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime(),
+    )
+    return {
+      upcoming: all.filter((r) => OPEN_STATUSES.includes(r.status)).reverse(),
+      past: all.filter((r) => !OPEN_STATUSES.includes(r.status)),
+    }
+  }, [query.data])
+
+  if (query.isLoading) return <LoadingState />
+  if (query.isError)
+    return <ErrorState subtitle={apiErrorMessage(query.error)} onRetry={() => query.refetch()} />
+  if ((query.data ?? []).length === 0)
+    return (
+      <EmptyState
+        icon={<EventAvailableRoundedIcon sx={{ fontSize: 48 }} />}
+        title="No bookings yet"
+        subtitle="Find a place nearby and reserve a bay in a few taps."
+        action={{ label: 'Explore places', onClick: () => navigate('/explore') }}
+      />
+    )
+
+  const renderCard = (reservation: Reservation) => (
+    <Grid item xs={12} md={6} key={reservation.id}>
+      <Card sx={{ height: '100%' }}>
+        <CardContent>
+          <Stack spacing={1.5}>
+            <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography fontWeight={700} noWrap>
+                  {reservation.siteName ?? reservation.zoneName}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {reservation.zoneName} · bay {reservation.assignedSpaceCode ?? 'TBA'} · {reservation.plateNumber}
+                </Typography>
+              </Box>
+              <StatusChip kind="reservation" value={reservation.status} />
+            </Stack>
+            <Typography variant="body2">{windowLabel(reservation)}</Typography>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
+              <Typography variant="body2" color="text.secondary">
+                {reservation.code} ·{' '}
+                {reservation.estimatedAmount ? `est. ${formatMoney(reservation.estimatedAmount)}` : 'Free'}
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                {reservation.status === 'CONFIRMED' && (
+                  <Button
+                    size="small"
+                    color="inherit"
+                    onClick={async () => {
+                      if (
+                        await confirm({
+                          title: 'Cancel booking?',
+                          message: `Bay ${reservation.assignedSpaceCode ?? ''} at ${reservation.siteName ?? reservation.zoneName} will be released.`,
+                          confirmLabel: 'Cancel booking',
+                        })
+                      ) {
+                        cancel.mutate(reservation.id)
+                      }
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                )}
+                {reservation.status === 'CONFIRMED' && (
+                  <Tooltip
+                    title={canCheckIn(reservation, now) ? '' : 'Check-in opens 15 minutes before your slot'}
+                  >
+                    <span>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        startIcon={<LoginRoundedIcon />}
+                        disabled={!canCheckIn(reservation, now) || checkIn.isPending}
+                        onClick={() => checkIn.mutate(reservation.id)}
+                      >
+                        Check in
+                      </Button>
+                    </span>
+                  </Tooltip>
+                )}
+                {reservation.status === 'ACTIVE' && (
+                  <Button
+                    size="small"
+                    variant="contained"
+                    color="success"
+                    startIcon={<LogoutRoundedIcon />}
+                    disabled={checkOut.isPending}
+                    onClick={() => checkOut.mutate(reservation.id)}
+                  >
+                    Check out
+                  </Button>
+                )}
+              </Stack>
+            </Stack>
+          </Stack>
+        </CardContent>
+      </Card>
+    </Grid>
+  )
+
+  return (
+    <Stack spacing={3}>
+      <Box>
+        <Typography variant="overline" color="text.secondary">
+          Upcoming & active
+        </Typography>
+        {upcoming.length === 0 ? (
+          <EmptyState title="Nothing upcoming" subtitle="Your next booking will appear here." action={{ label: 'Book parking', onClick: onBook }} />
+        ) : (
+          <Grid container spacing={2}>
+            {upcoming.map(renderCard)}
+          </Grid>
+        )}
+      </Box>
+      {past.length > 0 && (
+        <Box>
+          <Typography variant="overline" color="text.secondary">
+            Past
+          </Typography>
+          <Grid container spacing={2}>
+            {past.map(renderCard)}
+          </Grid>
+        </Box>
+      )}
+      {confirmDialog}
+      {paymentDialog}
+    </Stack>
+  )
+}
+
+function DriverHistory() {
+  const query = useQuery({ queryKey: queryKeys.mySessions.all, queryFn: mySessionsApi.list })
+  const { openPayment, paymentDialog } = useStayActions()
+
+  if (query.isLoading) return <LoadingState />
+  if (query.isError)
+    return <ErrorState subtitle={apiErrorMessage(query.error)} onRetry={() => query.refetch()} />
+  const stays = query.data ?? []
+  if (stays.length === 0)
+    return <EmptyState title="No parking history yet" subtitle="Your completed stays and receipts will appear here." />
+
+  return (
+    <>
+      <TableContainer>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Place</TableCell>
+              <TableCell>Check-in</TableCell>
+              <TableCell>Duration</TableCell>
+              <TableCell align="right">Amount</TableCell>
+              <TableCell>Payment</TableCell>
+              <TableCell align="right" />
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {stays.map((stay: MySession) => (
+              <TableRow key={stay.id} hover>
+                <TableCell>
+                  <Typography variant="body2" fontWeight={600}>
+                    {stay.siteName ?? stay.zoneName}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Bay {stay.spaceCode ?? '—'} · {stay.plateNumber ?? '—'} · {stay.code}
+                  </Typography>
+                </TableCell>
+                <TableCell>{format(new Date(stay.checkInAt), 'dd MMM, HH:mm')}</TableCell>
+                <TableCell>
+                  {stay.status === 'ACTIVE' ? <StatusChip kind="session" value="ACTIVE" /> : formatDuration(stay.durationMinutes)}
+                </TableCell>
+                <TableCell align="right">{stay.hourlyRate ? formatMoney(stay.amount) : 'Free'}</TableCell>
+                <TableCell>
+                  {stay.paymentStatus ? (
+                    <Tooltip title={stay.paymentRef ? `Ref ${stay.paymentRef} · ${stay.paymentMethod}` : ''}>
+                      <span>
+                        <StatusChip kind="payment" value={stay.paymentStatus} />
+                      </span>
+                    </Tooltip>
+                  ) : (
+                    '—'
+                  )}
+                </TableCell>
+                <TableCell align="right">
+                  {stay.paymentStatus === 'PENDING' && (
+                    <Button size="small" variant="contained" startIcon={<PaymentsRoundedIcon />} onClick={() => openPayment(stay)}>
+                      Pay
+                    </Button>
+                  )}
+                </TableCell>
               </TableRow>
-            </TableHead>
-            <TableBody>
-              {reservations.map((reservation) => (
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+      {paymentDialog}
+    </>
+  )
+}
+
+function useCancel() {
+  const queryClient = useQueryClient()
+  const { enqueueSnackbar } = useSnackbar()
+  return useMutation({
+    mutationFn: (id: number) => reservationsApi.cancel(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.reservations.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.places.all })
+      enqueueSnackbar('Booking cancelled', { variant: 'success' })
+    },
+    onError: (error) => enqueueSnackbar(apiErrorMessage(error), { variant: 'error' }),
+  })
+}
+
+function StaffReservations({ onBook }: { onBook: () => void }) {
+  const queryClient = useQueryClient()
+  const { enqueueSnackbar } = useSnackbar()
+  const [confirm, confirmDialog] = useConfirm()
+  const query = useQuery({ queryKey: queryKeys.reservations.list(), queryFn: () => reservationsApi.list() })
+
+  const action = useMutation({
+    mutationFn: async ({ id, kind }: { id: number; kind: 'cancel' | 'complete' | 'delete' }) => {
+      if (kind === 'cancel') await reservationsApi.cancel(id)
+      else if (kind === 'complete') await reservationsApi.complete(id)
+      else await reservationsApi.remove(id)
+    },
+    onSuccess: (_, { kind }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.reservations.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.spaces.all })
+      enqueueSnackbar(kind === 'delete' ? 'Reservation deleted' : `Reservation ${kind === 'cancel' ? 'cancelled' : 'completed'}`, {
+        variant: 'success',
+      })
+    },
+    onError: (error) => enqueueSnackbar(apiErrorMessage(error), { variant: 'error' }),
+  })
+
+  const ask = async (reservation: Reservation, kind: 'cancel' | 'complete' | 'delete') => {
+    const copy = {
+      cancel: { title: 'Cancel reservation?', label: 'Cancel reservation', message: `${reservation.code} for ${reservation.userName} will be cancelled and its bay released.` },
+      complete: { title: 'Complete reservation?', label: 'Complete', message: `${reservation.code} will be closed. If the car is still parked, its stay is checked out and priced now.` },
+      delete: { title: 'Delete reservation?', label: 'Delete', message: `${reservation.code} will be permanently removed. This cannot be undone.` },
+    }[kind]
+    if (await confirm({ title: copy.title, message: copy.message, confirmLabel: copy.label })) {
+      action.mutate({ id: reservation.id, kind })
+    }
+  }
+
+  if (query.isLoading) return <LoadingState />
+  if (query.isError)
+    return <ErrorState subtitle={apiErrorMessage(query.error)} onRetry={() => query.refetch()} />
+  const reservations = query.data ?? []
+  if (reservations.length === 0)
+    return (
+      <EmptyState
+        title="No reservations"
+        subtitle="Bookings made by drivers, or on their behalf, appear here."
+        action={{ label: 'Book parking', onClick: onBook }}
+      />
+    )
+
+  return (
+    <>
+      <TableContainer>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Code</TableCell>
+              <TableCell>Driver</TableCell>
+              <TableCell>Vehicle</TableCell>
+              <TableCell>Place / bay</TableCell>
+              <TableCell>Window</TableCell>
+              <TableCell align="right">Est.</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell align="right">Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {reservations.map((reservation) => {
+              const open = OPEN_STATUSES.includes(reservation.status)
+              return (
                 <TableRow key={reservation.id} hover>
                   <TableCell sx={{ fontWeight: 600 }}>{reservation.code}</TableCell>
                   <TableCell>{reservation.userName}</TableCell>
                   <TableCell>{reservation.plateNumber}</TableCell>
-                  <TableCell>{reservation.zoneName}</TableCell>
-                  <TableCell>{reservation.assignedSpaceCode ?? '—'}</TableCell>
                   <TableCell>
-                    {format(new Date(reservation.startTime), 'dd MMM HH:mm')} →{' '}
-                    {format(new Date(reservation.endTime), 'dd MMM HH:mm')}
+                    {reservation.siteName ?? '—'}
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      {reservation.zoneName} · {reservation.assignedSpaceCode ?? '—'}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>{windowLabel(reservation)}</TableCell>
+                  <TableCell align="right">
+                    {reservation.estimatedAmount ? formatMoney(reservation.estimatedAmount) : 'Free'}
                   </TableCell>
                   <TableCell>
                     <StatusChip kind="reservation" value={reservation.status} />
                   </TableCell>
-                  <TableCell align="right">
+                  <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                     <Tooltip title="Complete">
-                      <IconButton
-                        size="small"
-                        color="success"
-                        onClick={() => actionMutation.mutate({ id: reservation.id, action: 'complete' })}
-                        disabled={!['PENDING', 'CONFIRMED', 'ACTIVE'].includes(reservation.status)}
-                      >
-                        <TaskAltRoundedIcon fontSize="small" />
-                      </IconButton>
+                      <span>
+                        <IconButton size="small" color="success" disabled={!open} onClick={() => ask(reservation, 'complete')}>
+                          <TaskAltRoundedIcon fontSize="small" />
+                        </IconButton>
+                      </span>
                     </Tooltip>
                     <Tooltip title="Cancel">
-                      <IconButton
-                        size="small"
-                        color="warning"
-                        onClick={() => actionMutation.mutate({ id: reservation.id, action: 'cancel' })}
-                        disabled={!['PENDING', 'CONFIRMED', 'ACTIVE'].includes(reservation.status)}
-                      >
-                        <CancelRoundedIcon fontSize="small" />
-                      </IconButton>
+                      <span>
+                        <IconButton
+                          size="small"
+                          color="warning"
+                          disabled={!open || reservation.status === 'ACTIVE'}
+                          onClick={() => ask(reservation, 'cancel')}
+                        >
+                          <CancelRoundedIcon fontSize="small" />
+                        </IconButton>
+                      </span>
                     </Tooltip>
-                    {isStaff && (
-                      <Tooltip title="Delete">
+                    <Tooltip title="Delete">
+                      <span>
                         <IconButton
                           size="small"
                           color="error"
-                          onClick={() => actionMutation.mutate({ id: reservation.id, action: 'delete' })}
+                          disabled={reservation.status === 'ACTIVE'}
+                          onClick={() => ask(reservation, 'delete')}
                         >
                           <DeleteOutlineRoundedIcon fontSize="small" />
                         </IconButton>
-                      </Tooltip>
-                    )}
+                      </span>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-        ))}
+              )
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
+      {confirmDialog}
+    </>
+  )
+}
 
-      {tab === 'sessions' &&
-        (sessionsQuery.isLoading ? (
-          <LoadingState />
-        ) : sessions.length === 0 ? (
-          <EmptyState
-            title="No sessions yet"
-            subtitle="A session is opened automatically when a space becomes occupied and closed when it is vacated."
-          />
-        ) : (
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Code</TableCell>
-                  <TableCell>Space</TableCell>
-                  <TableCell>Driver / vehicle</TableCell>
-                  <TableCell>Check-in</TableCell>
-                  <TableCell>Check-out</TableCell>
-                  <TableCell>Duration</TableCell>
-                  <TableCell>Status</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {sessions.map((session) => (
-                  <TableRow key={session.id} hover>
-                    <TableCell sx={{ fontWeight: 600 }}>{session.code}</TableCell>
-                    <TableCell>
-                      {session.spaceCode ?? '—'} · {session.zoneName}
-                    </TableCell>
-                    <TableCell>
-                      {'userName' in session ? (session as { userName?: string }).userName ?? '—' : currentUser?.fullName ?? '—'}
-                      {session.plateNumber ? ` · ${session.plateNumber}` : ''}
-                    </TableCell>
-                    <TableCell>{format(new Date(session.checkInAt), 'dd MMM HH:mm')}</TableCell>
-                    <TableCell>
-                      {session.checkOutAt ? format(new Date(session.checkOutAt), 'dd MMM HH:mm') : '—'}
-                    </TableCell>
-                    <TableCell>
-                      {session.durationMinutes != null ? `${session.durationMinutes} min` : '—'}
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        color={session.status === 'ACTIVE' ? 'success' : 'default'}
-                        label={session.status}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        ))}
+function StaffSessions() {
+  const queryClient = useQueryClient()
+  const { enqueueSnackbar } = useSnackbar()
+  const [collectFor, setCollectFor] = useState<ParkingSession | null>(null)
+  const query = useQuery({ queryKey: queryKeys.sessions.list(), queryFn: () => sessionsApi.list() })
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>New reservation</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            {currentUser?.role === 'ADMIN' && (
-              <TextField
-                select
-                label="User"
-                value={form.userId}
-                onChange={(event) => setForm({ ...form, userId: Number(event.target.value) })}
-                fullWidth
-              >
-                {(usersQuery.data ?? []).map((user) => (
-                  <MenuItem key={user.id} value={user.id}>
-                    {user.fullName} ({user.email})
-                  </MenuItem>
-                ))}
-              </TextField>
-            )}
-            <TextField
-              select
-              label="Vehicle"
-              value={form.vehicleId}
-              onChange={(event) => setForm({ ...form, vehicleId: Number(event.target.value) })}
-              fullWidth
-            >
-              {(vehiclesQuery.data ?? []).map((vehicle) => (
-                <MenuItem key={vehicle.id} value={vehicle.id}>
-                  {vehicle.plateNumber} · {vehicle.make} {vehicle.model}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select
-              label="Zone"
-              value={form.zoneId}
-              onChange={(event) =>
-                setForm({ ...form, zoneId: Number(event.target.value), assignedSpaceId: '' })
-              }
-              fullWidth
-            >
-              {(zonesQuery.data ?? []).map((zone) => (
-                <MenuItem key={zone.id} value={zone.id}>
-                  {zone.name} ({zone.availableSpaces} available)
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select
-              label="Space (optional)"
-              value={form.assignedSpaceId}
-              onChange={(event) => setForm({ ...form, assignedSpaceId: Number(event.target.value) })}
-              fullWidth
-              disabled={form.zoneId === ''}
-              helperText="Leave blank to auto-assign the first available space"
-            >
-              <MenuItem value="">Auto-assign</MenuItem>
-              {(spacesQuery.data ?? []).map((space) => (
-                <MenuItem key={space.id} value={space.id} disabled={space.status !== 'AVAILABLE'}>
-                  {space.code ?? 'Unnamed'} · {space.status}
-                </MenuItem>
-              ))}
-            </TextField>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <TextField
-                label="Start"
-                type="datetime-local"
-                value={form.startTime}
-                onChange={(event) => setForm({ ...form, startTime: event.target.value })}
-                fullWidth
-                error={Boolean(timeError)}
-                InputLabelProps={{ shrink: true }}
-                inputProps={{ min: toLocalInput(new Date()) }}
-              />
-              <TextField
-                label="End"
-                type="datetime-local"
-                value={form.endTime}
-                onChange={(event) => setForm({ ...form, endTime: event.target.value })}
-                fullWidth
-                error={Boolean(timeError)}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Stack>
-            {timeError ? (
-              <Alert severity="warning" onClose={() => undefined}>
-                {timeError}
-              </Alert>
-            ) : (
-              <Paper variant="outlined" sx={{ p: 2, bgcolor: 'action.hover' }}>
-                <Stack spacing={1}>
-                  <Stack direction="row" justifyContent="space-between">
-                    <Typography variant="body2" color="text.secondary">
-                      Duration
-                    </Typography>
-                    <Typography variant="body2" fontWeight={600}>
-                      {hours < 1 ? `${Math.round(hours * 60)} min` : `${hours.toFixed(1)} hrs`}
-                    </Typography>
-                  </Stack>
-                  {selectedVehicle ? (
-                    <Stack direction="row" justifyContent="space-between">
-                      <Typography variant="body2" color="text.secondary">
-                        Vehicle
-                      </Typography>
-                      <Typography variant="body2" fontWeight={600}>
-                        {selectedVehicle.plateNumber}
-                      </Typography>
-                    </Stack>
-                  ) : null}
-                  <Stack direction="row" justifyContent="space-between">
-                    <Typography variant="body2" color="text.secondary">
-                      Area
-                    </Typography>
-                    <Typography variant="body2" fontWeight={600}>
-                      {selectedZone?.name ?? '—'}
-                    </Typography>
-                  </Stack>
-                  <Stack direction="row" justifyContent="space-between">
-                    <Typography variant="body2" color="text.secondary">
-                      Space
-                    </Typography>
-                    <Typography variant="body2" fontWeight={600}>
-                      {selectedSpace?.code ?? 'Auto-assign on arrival'}
-                    </Typography>
-                  </Stack>
-                  <Divider />
-                  <Typography variant="caption" color="text.secondary">
-                    Billing is not enabled yet, so no charge is applied for this booking.
-                  </Typography>
-                </Stack>
-              </Paper>
-            )}
-          </Stack>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setDialogOpen(false)} color="inherit">
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            onClick={() => createMutation.mutate(form)}
-            disabled={
-              !form.userId ||
-              !form.vehicleId ||
-              !form.zoneId ||
-              Boolean(timeError) ||
-              createMutation.isPending
-            }
-          >
-            {createMutation.isPending ? 'Creating…' : 'Confirm booking'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+  const collect = useMutation({
+    mutationFn: ({ id, method }: { id: number; method: PaymentMethod }) => sessionsApi.recordPayment(id, method),
+    onSuccess: (session) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all })
+      setCollectFor(null)
+      enqueueSnackbar(`Payment recorded · ${session.paymentRef}`, { variant: 'success' })
+    },
+    onError: (error) => enqueueSnackbar(apiErrorMessage(error), { variant: 'error' }),
+  })
+
+  if (query.isLoading) return <LoadingState />
+  if (query.isError)
+    return <ErrorState subtitle={apiErrorMessage(query.error)} onRetry={() => query.refetch()} />
+  const sessions = query.data ?? []
+  if (sessions.length === 0)
+    return (
+      <EmptyState
+        title="No sessions yet"
+        subtitle="A session opens when a space becomes occupied and closes when it is vacated."
+      />
+    )
+
+  return (
+    <>
+      <TableContainer>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Code</TableCell>
+              <TableCell>Space</TableCell>
+              <TableCell>Driver / vehicle</TableCell>
+              <TableCell>Check-in</TableCell>
+              <TableCell>Check-out</TableCell>
+              <TableCell>Duration</TableCell>
+              <TableCell align="right">Amount</TableCell>
+              <TableCell>Payment</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {sessions.map((session) => (
+              <TableRow key={session.id} hover>
+                <TableCell sx={{ fontWeight: 600 }}>{session.code}</TableCell>
+                <TableCell>
+                  {session.spaceCode ?? '—'} · {session.zoneName}
+                </TableCell>
+                <TableCell>
+                  {session.userName ?? 'Walk-in'}
+                  {session.plateNumber ? ` · ${session.plateNumber}` : ''}
+                </TableCell>
+                <TableCell>{format(new Date(session.checkInAt), 'dd MMM HH:mm')}</TableCell>
+                <TableCell>{session.checkOutAt ? format(new Date(session.checkOutAt), 'dd MMM HH:mm') : '—'}</TableCell>
+                <TableCell>
+                  {session.status === 'ACTIVE' ? (
+                    <StatusChip kind="session" value="ACTIVE" />
+                  ) : (
+                    formatDuration(session.durationMinutes)
+                  )}
+                </TableCell>
+                <TableCell align="right">{session.amount != null ? formatMoney(session.amount) : '—'}</TableCell>
+                <TableCell>
+                  {session.paymentStatus === 'PENDING' ? (
+                    <Button size="small" variant="outlined" onClick={() => setCollectFor(session)}>
+                      Record payment
+                    </Button>
+                  ) : session.paymentStatus ? (
+                    <StatusChip kind="payment" value={session.paymentStatus} />
+                  ) : (
+                    '—'
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+      <PaymentDialog
+        open={collectFor !== null}
+        title="Record payment"
+        amount={collectFor?.amount}
+        description={collectFor ? `${collectFor.code} · ${collectFor.zoneName} · ${collectFor.spaceCode ?? ''}` : undefined}
+        durationMinutes={collectFor?.durationMinutes}
+        loading={collect.isPending}
+        onPay={(method) => collectFor && collect.mutate({ id: collectFor.id, method })}
+        onClose={() => setCollectFor(null)}
+      />
+    </>
   )
 }

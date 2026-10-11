@@ -43,7 +43,7 @@ export default function LoginPage() {
     setError(null)
     try {
       const result = await login({ email, password })
-      dispatch(setCredentials({ token: result.token, user: result.user }))
+      dispatch(setCredentials({ token: result.token, user: result.user, expiresInMs: result.expiresInMs }))
       const fallback = result.user.role === 'USER' ? '/explore' : '/dashboard'
       navigate(location.state?.from ?? fallback, { replace: true })
     } catch (err) {

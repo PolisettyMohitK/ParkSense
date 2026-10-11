@@ -58,3 +58,6 @@ Thumbs.db
 # Docs build
 docs/_build/
 site/
+.junie/
+.pytest_cache/
+coverage/

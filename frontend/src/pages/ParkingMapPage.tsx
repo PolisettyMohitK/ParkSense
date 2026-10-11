@@ -18,8 +18,11 @@ import LoadingState from '../components/LoadingState'
 import { spacesApi, zonesApi } from '../api/parking'
 import { occupancyApi } from '../api/occupancy'
 import { apiErrorMessage } from '../api/client'
+import { queryKeys } from '../api/queryKeys'
+import { useConfirm } from '../hooks/useConfirm'
+import ErrorState from '../components/ErrorState'
 import { useOccupancyStream } from '../hooks/useOccupancyStream'
-import type { SpaceStatus } from '../types'
+import type { ParkingSpace, SpaceStatus } from '../types'
 import { designTokens } from '../theme/tokens.generated'
 
 const SPACE_W = 84
@@ -47,29 +50,56 @@ export default function ParkingMapPage() {
   const queryClient = useQueryClient()
   const { enqueueSnackbar } = useSnackbar()
   const [zoneId, setZoneId] = useState<number | ''>('')
+  const [confirm, confirmDialog] = useConfirm()
 
-  const zonesQuery = useQuery({ queryKey: ['zones'], queryFn: () => zonesApi.list() })
+  const zonesQuery = useQuery({ queryKey: queryKeys.zones.list(), queryFn: () => zonesApi.list() })
   const zones = zonesQuery.data ?? []
   const activeZoneId = zoneId === '' ? zones[0]?.id : zoneId
 
   const spacesQuery = useQuery({
-    queryKey: ['spaces', activeZoneId],
+    queryKey: queryKeys.spaces.list(activeZoneId),
     queryFn: () => spacesApi.list(activeZoneId as number),
     enabled: Boolean(activeZoneId),
   })
 
-  useOccupancyStream(() => {
-    queryClient.invalidateQueries({ queryKey: ['spaces'] })
-  })
+  useOccupancyStream(
+    (event) => {
+      if (event.zoneId === activeZoneId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.spaces.list(activeZoneId) })
+      }
+    },
+    { debounceMs: 250 },
+  )
 
   const occupancyMutation = useMutation({
     mutationFn: (payload: { spaceId: number; state: 'OCCUPIED' | 'VACANT' }) =>
       occupancyApi.record({ spaceId: payload.spaceId, state: payload.state, source: 'MANUAL' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['spaces'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.spaces.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all })
+    },
     onError: (error) => enqueueSnackbar(apiErrorMessage(error), { variant: 'error' }),
   })
 
-  const spaces = spacesQuery.data ?? []
+  const toggle = async (space: ParkingSpace) => {
+    if (space.status === 'OUT_OF_SERVICE' || occupancyMutation.isPending) return
+    const vacate = space.status === 'OCCUPIED'
+    const ok = await confirm({
+      title: `${vacate ? 'Vacate' : 'Occupy'} space ${space.code ?? ''}?`,
+      message: vacate
+        ? 'This records the car as gone: the parking session is closed and priced.'
+        : 'This records a car in the space and opens a parking session (linked to a booking if one is due now).',
+      confirmLabel: vacate ? 'Mark vacant' : 'Mark occupied',
+    })
+    if (ok) occupancyMutation.mutate({ spaceId: space.id, state: vacate ? 'VACANT' : 'OCCUPIED' })
+  }
+
+  // Spaces without coordinates (e.g. created by hand) fall back to a tidy grid instead of stacking at 0,0.
+  const spaces = (spacesQuery.data ?? []).map((space, index) => ({
+    ...space,
+    positionX: space.positionX ?? 20 + (index % 6) * (SPACE_W + 16),
+    positionY: space.positionY ?? 20 + Math.floor(index / 6) * (SPACE_H + 16),
+  }))
 
   const canvas = useMemo(() => {
     const maxX = Math.max(320, ...spaces.map((space) => (space.positionX ?? 0) + SPACE_W + 60))
@@ -81,7 +111,7 @@ export default function ParkingMapPage() {
     <Box>
       <PageHeader
         title="Live parking map"
-        subtitle="Spatial layout of spaces. Click a space to toggle occupancy in real time."
+        subtitle="Spatial layout of spaces, updated live. Select a space to record a car arriving or leaving."
         action={
           <TextField
             select
@@ -92,7 +122,7 @@ export default function ParkingMapPage() {
           >
             {zones.map((zone) => (
               <MenuItem key={zone.id} value={zone.id}>
-                {zone.name} ({zone.code})
+                {zone.siteName} · {zone.name}
               </MenuItem>
             ))}
           </TextField>
@@ -112,6 +142,14 @@ export default function ParkingMapPage() {
 
       {spacesQuery.isLoading || zonesQuery.isLoading ? (
         <LoadingState minHeight={360} />
+      ) : zonesQuery.isError || spacesQuery.isError ? (
+        <ErrorState
+          subtitle={apiErrorMessage(zonesQuery.error ?? spacesQuery.error)}
+          onRetry={() => {
+            zonesQuery.refetch()
+            spacesQuery.refetch()
+          }}
+        />
       ) : (
         <Card>
           <CardContent sx={{ overflow: 'auto' }}>
@@ -136,12 +174,15 @@ export default function ParkingMapPage() {
                   }`}
                 >
                   <Box
-                    onClick={() => {
-                      if (space.status === 'OUT_OF_SERVICE') return
-                      occupancyMutation.mutate({
-                        spaceId: space.id,
-                        state: space.status === 'OCCUPIED' ? 'VACANT' : 'OCCUPIED',
-                      })
+                    role="button"
+                    tabIndex={space.status === 'OUT_OF_SERVICE' ? -1 : 0}
+                    aria-label={`Space ${space.code ?? space.id}, ${space.status.toLowerCase().replace('_', ' ')}`}
+                    onClick={() => toggle(space)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        toggle(space)
+                      }
                     }}
                     sx={{
                       position: 'absolute',
@@ -156,7 +197,7 @@ export default function ParkingMapPage() {
                       placeItems: 'center',
                       cursor: space.status === 'OUT_OF_SERVICE' ? 'not-allowed' : 'pointer',
                       transition: 'transform .15s ease',
-                      '&:hover': { transform: 'scale(1.05)' },
+                      '&:hover, &:focus-visible': { transform: 'scale(1.05)', outline: 'none' },
                     }}
                   >
                     <Box sx={{ textAlign: 'center' }}>
@@ -181,6 +222,7 @@ export default function ParkingMapPage() {
           </CardContent>
         </Card>
       )}
+      {confirmDialog}
     </Box>
   )
 }

@@ -49,11 +49,11 @@ public class SiteSurvey extends BaseEntity {
     private String status = "completed";
 
     @Lob
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "MEDIUMTEXT")
     private String layoutJson;
 
     @Lob
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "MEDIUMTEXT")
     private String reportJson;
 
     @Builder.Default

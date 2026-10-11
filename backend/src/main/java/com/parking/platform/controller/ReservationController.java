@@ -1,6 +1,7 @@
 package com.parking.platform.controller;
 
 import com.parking.platform.dto.request.ReservationRequest;
+import com.parking.platform.dto.response.MySessionResponse;
 import com.parking.platform.dto.response.ReservationResponse;
 import com.parking.platform.security.SecurityUtils;
 import com.parking.platform.service.ReservationService;
@@ -49,6 +50,16 @@ public class ReservationController {
     @PatchMapping("/{id}/cancel")
     public ReservationResponse cancel(@PathVariable Long id) {
         return service.cancel(id);
+    }
+
+    @PostMapping("/{id}/check-in")
+    public ReservationResponse checkIn(@PathVariable Long id) {
+        return service.checkIn(id);
+    }
+
+    @PostMapping("/{id}/check-out")
+    public MySessionResponse checkOut(@PathVariable Long id) {
+        return service.checkOut(id);
     }
 
     @PatchMapping("/{id}/complete")

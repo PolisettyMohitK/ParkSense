@@ -9,6 +9,7 @@ import com.parking.platform.exception.ResourceNotFoundException;
 import com.parking.platform.mapper.MonitoringDeviceMapper;
 import com.parking.platform.repository.MonitoringDeviceRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -64,7 +65,12 @@ public class MonitoringDeviceService {
 
     @Transactional
     public void delete(Long id) {
-        repository.delete(getEntity(id));
+        try {
+            repository.delete(getEntity(id));
+            repository.flush();
+        } catch (DataIntegrityViolationException ex) {
+            throw new ConflictException("Device has recorded events - deactivate it instead");
+        }
     }
 
     public MonitoringDevice getEntity(Long id) {

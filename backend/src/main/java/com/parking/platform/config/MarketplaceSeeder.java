@@ -18,7 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,7 +35,7 @@ import java.util.Random;
  * vs. commercial paid parking (malls, IT tech parks, hospitals).
  */
 @Component
-@Profile("dev")
+@ConditionalOnProperty(name = "app.seed.demo", havingValue = "true")
 @Order(2)
 @RequiredArgsConstructor
 public class MarketplaceSeeder implements ApplicationRunner {
@@ -94,7 +94,7 @@ public class MarketplaceSeeder implements ApplicationRunner {
                     null, // Free customer parking
                     "7:30 AM – 11:30 PM",
                     "EV_CHARGING,CCTV,COVERED",
-                    "/places/cafe-2.jpg",
+                    "/places/cafe-roast.jpg",
                     1,
                     12,
                     0.40,
@@ -110,7 +110,7 @@ public class MarketplaceSeeder implements ApplicationRunner {
                     null, // Free patron parking
                     "10:00 AM – 11:00 PM",
                     "VALET,CCTV",
-                    "/places/cafe-3.jpg",
+                    "/places/bakery-concu.jpg",
                     1,
                     10,
                     0.60,
@@ -142,7 +142,7 @@ public class MarketplaceSeeder implements ApplicationRunner {
                     40, // Commercial paid parking: ₹40/hr
                     "10:00 AM – 11:00 PM",
                     "EV_CHARGING,COVERED,CCTV,VALET",
-                    "/places/mall.jpg",
+                    "/places/inorbit.jpg",
                     2,
                     24,
                     0.70,
@@ -158,7 +158,7 @@ public class MarketplaceSeeder implements ApplicationRunner {
                     50, // Commercial paid: ₹50/hr
                     "10:00 AM – 11:00 PM",
                     "EV_CHARGING,COVERED,CCTV,VALET",
-                    "/places/mall.jpg",
+                    "/places/sarath-city.jpg",
                     3,
                     20,
                     0.65,
@@ -174,7 +174,7 @@ public class MarketplaceSeeder implements ApplicationRunner {
                     30, // Commercial paid: ₹30/hr
                     "7:00 AM – 11:00 PM",
                     "EV_CHARGING,COVERED,CCTV",
-                    "/places/office.jpg",
+                    "/places/cybertowers.jpg",
                     2,
                     28,
                     0.80,
@@ -190,7 +190,7 @@ public class MarketplaceSeeder implements ApplicationRunner {
                     20, // Hospital paid: ₹20/hr
                     "Open 24 hours",
                     "CCTV,COVERED",
-                    "/places/hospital.jpg",
+                    "/places/aig-hospital.jpg",
                     2,
                     20,
                     0.85,
@@ -206,7 +206,7 @@ public class MarketplaceSeeder implements ApplicationRunner {
                     null, // Free / complimentary valet for hotel patrons
                     "Open 24 hours",
                     "VALET,COVERED,CCTV,EV_CHARGING",
-                    "/places/hotel.jpg",
+                    "/places/itc-kohenur.jpg",
                     1,
                     18,
                     0.45,
@@ -218,6 +218,7 @@ public class MarketplaceSeeder implements ApplicationRunner {
     @Transactional
     public void run(ApplicationArguments args) {
         if (organizationRepository.existsByCode(MARKER_CODE)) {
+            refreshCovers();
             backfillDemoSite();
             return;
         }
@@ -325,6 +326,19 @@ public class MarketplaceSeeder implements ApplicationRunner {
                 spec.ratePerHour() != null ? ("₹" + spec.ratePerHour() + "/hr") : "Free / Customer Managed");
     }
 
+    /** Databases seeded before venue photography existed still point at generic stock covers. */
+    private void refreshCovers() {
+        for (PlaceSpec spec : PLACES) {
+            organizationRepository.findByCode("PLACE-" + spec.slug().toUpperCase()).ifPresent(org ->
+                    siteRepository.findByOrganizationIdAndCode(org.getId(), "VENUE-" + spec.slug().toUpperCase())
+                            .filter(site -> !spec.cover().equals(site.getCoverImageUrl()))
+                            .ifPresent(site -> {
+                                site.setCoverImageUrl(spec.cover());
+                                siteRepository.save(site);
+                            }));
+        }
+    }
+
     private void backfillDemoSite() {
         organizationRepository.findByCode("DEMO").ifPresent(org -> {
             org.setAddress("Road No. 1, Banjara Hills, Hyderabad");
@@ -338,7 +352,7 @@ public class MarketplaceSeeder implements ApplicationRunner {
                         site.setLatitude(17.4156);
                         site.setLongitude(78.4353);
                         site.setCategory(PlaceCategory.OFFICE);
-                        site.setCoverImageUrl("/places/campus.jpg");
+                        site.setCoverImageUrl("/places/campus-banjara.jpg");
                         site.setHourlyRate(null); // Org managed / complimentary
                         site.setOpeningHours("Open 24 hours");
                         site.setAmenities("EV_CHARGING,COVERED,CCTV");

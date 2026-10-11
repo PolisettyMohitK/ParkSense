@@ -17,6 +17,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 @Entity
@@ -64,4 +65,8 @@ public class Reservation extends BaseEntity {
 
     @Column(nullable = false)
     private Instant endTime;
+
+    /** Price quoted at booking time (null/0 for complimentary venues). */
+    @Column(precision = 10, scale = 2)
+    private BigDecimal estimatedAmount;
 }

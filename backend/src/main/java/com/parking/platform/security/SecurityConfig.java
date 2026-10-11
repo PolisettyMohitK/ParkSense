@@ -1,6 +1,14 @@
 package com.parking.platform.security;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.config.Customizer;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.Arrays;
+import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -46,17 +54,19 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
+                .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/register").permitAll()
                         .requestMatchers(
-                                "/api/auth/**",
                                 "/api/health",
                                 "/places/**",
                                 "/ws/**",
+                                "/error",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
-                                "/swagger-ui.html",
-                                "/actuator/**")
+                                "/swagger-ui.html")
                         .permitAll()
                         .requestMatchers(HttpMethod.DELETE, "/api/parking/sites/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/organizations/**").hasRole("ADMIN")
@@ -66,17 +76,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/users/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/users/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/reservations/**").hasAnyRole("ADMIN", "MANAGER")
-                        .requestMatchers(HttpMethod.POST, "/api/occupancy/events").hasAnyRole("ADMIN", "MANAGER")
+                        .requestMatchers(HttpMethod.PATCH, "/api/reservations/*/complete").hasAnyRole("ADMIN", "MANAGER")
+                        .requestMatchers("/api/occupancy/**").hasAnyRole("ADMIN", "MANAGER")
                         .requestMatchers("/api/parking/**").hasAnyRole("ADMIN", "MANAGER")
                         .requestMatchers("/api/sessions/**").hasAnyRole("ADMIN", "MANAGER")
                         .requestMatchers("/api/devices/**").hasAnyRole("ADMIN", "MANAGER")
                         .requestMatchers("/api/analytics/**").hasAnyRole("ADMIN", "MANAGER")
                         .requestMatchers("/api/organizations/**").hasAnyRole("ADMIN", "MANAGER")
-                        .requestMatchers("/api/places/**").authenticated()
-                        .requestMatchers("/api/me/**").authenticated()
-                        .requestMatchers("/api/reservations/**").authenticated()
-                        .requestMatchers("/api/vehicles/**").authenticated()
-                        .requestMatchers(HttpMethod.GET, "/api/users").authenticated()
                         .anyRequest().authenticated())
                 .authenticationProvider(authenticationProvider())
                 .exceptionHandling(ex -> ex
@@ -86,6 +92,31 @@ public class SecurityConfig {
                                 writeError(response, 403, "Forbidden", "Access denied", request.getRequestURI())))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
+    }
+
+    /**
+     * CORS for the REST API. Origins come from {@code app.cors.allowed-origins} and may use patterns
+     * such as {@code https://*.parksense.pages.dev} for preview deployments.
+     */
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource(@Value("${app.cors.allowed-origins}") String allowedOrigins) {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowedOriginPatterns(splitOrigins(allowedOrigins));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setAllowCredentials(true);
+        configuration.setMaxAge(3600L);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/api/**", configuration);
+        source.registerCorsConfiguration("/places/**", configuration);
+        return source;
+    }
+
+    public static List<String> splitOrigins(String origins) {
+        return Arrays.stream(origins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toList();
     }
 
     private static void writeError(jakarta.servlet.http.HttpServletResponse response, int status,

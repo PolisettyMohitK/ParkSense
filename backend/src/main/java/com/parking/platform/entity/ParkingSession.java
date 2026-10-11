@@ -1,6 +1,8 @@
 package com.parking.platform.entity;
 
 import com.parking.platform.entity.enums.EventSource;
+import com.parking.platform.entity.enums.PaymentMethod;
+import com.parking.platform.entity.enums.PaymentStatus;
 import com.parking.platform.entity.enums.SessionStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -18,6 +20,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 @Entity
@@ -74,4 +77,21 @@ public class ParkingSession extends BaseEntity {
 
     @Column(length = 255)
     private String note;
+
+    /** Final charge, computed at check-out. */
+    @Column(precision = 10, scale = 2)
+    private BigDecimal amount;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private PaymentStatus paymentStatus;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private PaymentMethod paymentMethod;
+
+    @Column(length = 40)
+    private String paymentRef;
+
+    private Instant paidAt;
 }

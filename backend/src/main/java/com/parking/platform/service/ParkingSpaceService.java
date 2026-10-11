@@ -12,6 +12,7 @@ import com.parking.platform.exception.ResourceNotFoundException;
 import com.parking.platform.mapper.ParkingSpaceMapper;
 import com.parking.platform.repository.ParkingSpaceRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -84,7 +85,12 @@ public class ParkingSpaceService {
 
     @Transactional
     public void delete(Long id) {
-        repository.delete(getEntity(id));
+        try {
+            repository.delete(getEntity(id));
+            repository.flush();
+        } catch (DataIntegrityViolationException ex) {
+            throw new ConflictException("Space has occupancy history or bookings - set it out of service or deactivate it instead");
+        }
     }
 
     public ParkingSpace getEntity(Long id) {

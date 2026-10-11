@@ -12,7 +12,7 @@ public record ParkingSpaceRequest(
         VerificationStatus verificationStatus,
         Double positionX,
         Double positionY,
-        String polygon,
+        @Size(max = 20000) String polygon,
         @Size(max = 255) String label,
         Boolean active
 ) {

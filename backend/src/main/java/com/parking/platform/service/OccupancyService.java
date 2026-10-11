@@ -14,11 +14,14 @@ import com.parking.platform.repository.MonitoringDeviceRepository;
 import com.parking.platform.repository.OccupancyEventRepository;
 import com.parking.platform.repository.ParkingSpaceRepository;
 import com.parking.platform.repository.UserRepository;
+import com.parking.platform.exception.BadRequestException;
+import com.parking.platform.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -34,6 +37,7 @@ public class OccupancyService {
     private final ParkingSessionService sessionService;
     private final OccupancyEventMapper mapper;
     private final ApplicationEventPublisher eventPublisher;
+    private final Clock clock;
 
     @Transactional
     public OccupancyEventResponse recordEvent(OccupancyEventRequest request) {
@@ -48,13 +52,24 @@ public class OccupancyService {
         ParkingSpace space = spaceRepository.findById(request.spaceId())
                 .orElseThrow(() -> ResourceNotFoundException.of("ParkingSpace", request.spaceId()));
 
-        User actor = request.actorUserId() != null
-                ? userRepository.findById(request.actorUserId()).orElse(null)
-                : null;
+        // The audit actor is whoever is signed in; a client-supplied id is only honoured for
+        // unauthenticated internal callers (seeders, jobs).
+        Long actorId = SecurityUtils.currentUserId() != null ? SecurityUtils.currentUserId() : request.actorUserId();
+        User actor = actorId != null ? userRepository.findById(actorId).orElse(null) : null;
         MonitoringDevice device = request.deviceId() != null
-                ? deviceRepository.findById(request.deviceId()).orElse(null)
+                ? deviceRepository.findById(request.deviceId())
+                        .orElseThrow(() -> ResourceNotFoundException.of("MonitoringDevice", request.deviceId()))
                 : null;
-        Instant occurredAt = request.occurredAt() != null ? request.occurredAt() : Instant.now();
+        Instant now = Instant.now(clock);
+        Instant occurredAt = request.occurredAt() != null ? request.occurredAt() : now;
+        if (occurredAt.isAfter(now.plusSeconds(60))) {
+            throw new BadRequestException("Event time cannot be in the future");
+        }
+        // Events can arrive out of order (camera batches, retries). A reading older than the latest
+        // one for this space is kept for the audit trail but must not roll the space state back.
+        boolean stale = repository.findFirstBySpaceIdOrderByOccurredAtDescIdDesc(space.getId())
+                .map(latest -> occurredAt.isBefore(latest.getOccurredAt()))
+                .orElse(false);
 
         OccupancyEvent event = OccupancyEvent.builder()
                 .space(space)
@@ -68,12 +83,15 @@ public class OccupancyService {
                 .occurredAt(occurredAt)
                 .build();
 
+        OccupancyEvent saved = repository.save(event);
+        if (stale) {
+            return mapper.toResponse(saved);
+        }
+
         applyStateToSpace(space, request.state());
         spaceRepository.save(space);
-        OccupancyEvent saved = repository.save(event);
-
         if (request.state() == OccupancyState.OCCUPIED) {
-            sessionService.checkIn(space, request.source(), occurredAt, actor);
+            sessionService.checkIn(space, request.source(), occurredAt);
         } else if (request.state() == OccupancyState.VACANT) {
             sessionService.checkOut(space, occurredAt);
         }

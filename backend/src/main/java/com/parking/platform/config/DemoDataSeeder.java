@@ -30,7 +30,8 @@ import com.parking.platform.service.OccupancyService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
-import org.springframework.context.annotation.Profile;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -42,7 +43,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Component
-@Profile("dev")
+@ConditionalOnProperty(name = "app.seed.demo", havingValue = "true")
 @Order(1)
 @RequiredArgsConstructor
 public class DemoDataSeeder implements ApplicationRunner {
@@ -57,6 +58,13 @@ public class DemoDataSeeder implements ApplicationRunner {
     private final ReservationRepository reservationRepository;
     private final OccupancyService occupancyService;
     private final PasswordEncoder passwordEncoder;
+    @Value("${app.seed.admin-password:admin123}")
+    private String adminPassword;
+    @Value("${app.seed.manager-password:manager123}")
+    private String managerPassword;
+    @Value("${app.seed.user-password:user123}")
+    private String userPassword;
+
     private final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(DemoDataSeeder.class);
 
     @Override
@@ -78,15 +86,15 @@ public class DemoDataSeeder implements ApplicationRunner {
 
         User admin = userRepository.save(User.builder()
                 .fullName("Admin User").email("admin@parking.dev")
-                .passwordHash(passwordEncoder.encode("admin123"))
+                .passwordHash(passwordEncoder.encode(adminPassword))
                 .role(Role.ADMIN).phone("+91-9000000001").enabled(true).organization(organization).build());
         User manager = userRepository.save(User.builder()
                 .fullName("Maya Manager").email("manager@parking.dev")
-                .passwordHash(passwordEncoder.encode("manager123"))
+                .passwordHash(passwordEncoder.encode(managerPassword))
                 .role(Role.MANAGER).phone("+91-9000000002").enabled(true).organization(organization).build());
         User driver = userRepository.save(User.builder()
                 .fullName("Ravi Driver").email("user@parking.dev")
-                .passwordHash(passwordEncoder.encode("user123"))
+                .passwordHash(passwordEncoder.encode(userPassword))
                 .role(Role.USER).phone("+91-9000000003").enabled(true).organization(organization).build());
 
         ParkingSite site = siteRepository.save(ParkingSite.builder()
@@ -147,9 +155,8 @@ public class DemoDataSeeder implements ApplicationRunner {
 
         Instant now = Instant.now();
 
+        // Upcoming booking: the space is only held (RESERVED) once the hold window opens.
         ParkingSpace reservedSpace = level1Spaces.get(0);
-        reservedSpace.setReserved(true);
-        spaceRepository.save(reservedSpace);
         reservationRepository.save(Reservation.builder()
                 .code("RES-DEMO0001").user(driver).vehicle(car).zone(level1)
                 .assignedSpace(reservedSpace).status(ReservationStatus.CONFIRMED)
@@ -183,6 +190,6 @@ public class DemoDataSeeder implements ApplicationRunner {
         log.info("Seeded demo data: org={}, site=SITE-1, zones=L1/YARD, spaces=16, devices=1",
                 organization.getCode());
         log.info("Seeded 3 occupancy events per flow; 2 active sessions, 1 completed session");
-        log.info("Demo logins -> admin@parking.dev/admin123, manager@parking.dev/manager123, user@parking.dev/user123");
+        log.info("Demo logins -> admin@parking.dev, manager@parking.dev, user@parking.dev (passwords from app.seed.*-password)");
     }
 }

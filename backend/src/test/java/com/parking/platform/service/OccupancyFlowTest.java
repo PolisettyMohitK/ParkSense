@@ -89,7 +89,8 @@ class OccupancyFlowTest extends BaseServiceTest {
 
         var active = sessions.findFirstBySpaceIdAndStatusOrderByCheckInAtDesc(space.getId(), SessionStatus.ACTIVE);
         assertThat(active).isPresent();
-        assertThat(active.orElseThrow().getUser()).isNotNull();
+        // A staff-recorded walk-in is not attributed to the staff member.
+        assertThat(active.orElseThrow().getUser()).isNull();
 
         occupancy.recordEvent(request(OccupancyState.VACANT, null));
 
@@ -98,6 +99,29 @@ class OccupancyFlowTest extends BaseServiceTest {
         assertThat(completed.get(0).getStatus()).isEqualTo(SessionStatus.COMPLETED);
         assertThat(completed.get(0).getCheckOutAt()).isNotNull();
         assertThat(completed.get(0).getDurationMinutes()).isNotNegative();
+    }
+
+    @Test
+    void anOlderReadingDoesNotRollTheSpaceBack() {
+        occupancy.recordEvent(request(OccupancyState.OCCUPIED, null));
+        occupancy.recordEvent(new OccupancyEventRequest(space.getId(), OccupancyState.VACANT, EventSource.CAMERA,
+                0.9, null, null, null, null, Instant.now().minus(10, ChronoUnit.MINUTES)));
+
+        assertThat(spaces.findById(space.getId()).orElseThrow().getOccupancyState())
+                .isEqualTo(OccupancyState.OCCUPIED);
+        assertThat(events.count()).isEqualTo(2);
+    }
+
+    @Test
+    void walkInStaysArePricedAtCheckOut() {
+        occupancy.recordEvent(new OccupancyEventRequest(space.getId(), OccupancyState.OCCUPIED,
+                EventSource.CAMERA, 0.9, null, null, null, null, Instant.now().minus(130, ChronoUnit.MINUTES)));
+        occupancy.recordEvent(request(OccupancyState.VACANT, null));
+
+        var session = sessions.findAllBySpaceIdOrderByCheckInAtDesc(space.getId()).get(0);
+        // 2h10m at Rs 50/h, per started hour -> 3h = Rs 150
+        assertThat(session.getAmount()).isEqualByComparingTo("150");
+        assertThat(session.getPaymentStatus()).isEqualTo(com.parking.platform.entity.enums.PaymentStatus.PENDING);
     }
 
     @Test

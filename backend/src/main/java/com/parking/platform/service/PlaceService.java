@@ -8,21 +8,25 @@ import com.parking.platform.dto.response.PublicZoneResponse;
 import com.parking.platform.entity.ParkingSite;
 import com.parking.platform.entity.ParkingSpace;
 import com.parking.platform.entity.ParkingZone;
-import com.parking.platform.entity.enums.OccupancyState;
-import com.parking.platform.entity.enums.OperationalState;
 import com.parking.platform.entity.enums.PlaceCategory;
 import com.parking.platform.entity.enums.VerificationStatus;
 import com.parking.platform.exception.ResourceNotFoundException;
 import com.parking.platform.repository.ParkingSpaceRepository;
 import com.parking.platform.repository.ParkingSiteRepository;
 import com.parking.platform.repository.ParkingZoneRepository;
+import com.parking.platform.dto.response.PriceQuoteResponse;
+import com.parking.platform.exception.BadRequestException;
+import com.parking.platform.service.SpaceStatsService.Counts;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Arrays;
 import java.util.Comparator;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.Locale;
 
 /**
@@ -41,6 +45,9 @@ public class PlaceService {
     private final ParkingZoneRepository zoneRepository;
     private final ParkingSpaceRepository spaceRepository;
     private final ParkingZoneService zoneService;
+    private final SpaceStatsService statsService;
+    private final PricingService pricingService;
+    private final PlacePhotoCatalog photoCatalog;
 
     @Transactional(readOnly = true)
     public List<PlaceSummaryResponse> search(
@@ -66,9 +73,17 @@ public class PlaceService {
                     : siteRepository.findAllByActiveTrue();
         }
 
-        return candidates.stream()
+        List<ParkingSite> matching = candidates.stream()
                 .filter(site -> needle.isEmpty() || matches(site, needle))
-                .map(site -> toSummary(site, latitude, longitude))
+                .toList();
+        Map<Long, List<ParkingZone>> zonesBySite = zoneRepository
+                .findAllBySiteIdInAndActiveTrue(matching.stream().map(ParkingSite::getId).toList())
+                .stream()
+                .collect(Collectors.groupingBy(zone -> zone.getSite().getId()));
+        Map<Long, Counts> counts = statsService.forZones(
+                zonesBySite.values().stream().flatMap(List::stream).map(ParkingZone::getId).toList());
+        return matching.stream()
+                .map(site -> toSummary(site, zonesBySite.getOrDefault(site.getId(), List.of()), counts, latitude, longitude))
                 .sorted(comparator(latitude, longitude))
                 .limit(cappedLimit)
                 .toList();
@@ -76,9 +91,9 @@ public class PlaceService {
 
     @Transactional(readOnly = true)
     public PlaceDetailResponse detail(Long siteId, Double latitude, Double longitude) {
-        ParkingSite site = siteRepository.findById(siteId)
+        ParkingSite site = siteRepository.findByIdAndActiveTrue(siteId)
                 .orElseThrow(() -> ResourceNotFoundException.of("ParkingSite", siteId));
-        List<ParkingZoneResponse> zones = zoneService.findBySite(siteId);
+        List<ParkingZoneResponse> zones = zoneService.findActiveBySite(siteId);
         return new PlaceDetailResponse(
                 toSummary(site, latitude, longitude),
                 site.getDescription(),
@@ -108,12 +123,22 @@ public class PlaceService {
         return spaces.stream().map(this::toPublicSpace).toList();
     }
 
+    @Transactional(readOnly = true)
+    public PriceQuoteResponse quote(Long siteId, Instant start, Instant end) {
+        ParkingSite site = siteRepository.findByIdAndActiveTrue(siteId)
+                .orElseThrow(() -> ResourceNotFoundException.of("ParkingSite", siteId));
+        if (start == null || end == null || !end.isAfter(start)) {
+            throw new BadRequestException("Provide a start and an end time, with end after start");
+        }
+        return pricingService.quote(site, start, end);
+    }
+
     private PublicZoneResponse toPublicZone(ParkingZone zone) {
-        long total = spaceRepository.countByZoneId(zone.getId());
-        long occupied = spaceRepository.countByZoneIdAndOccupancyState(zone.getId(), OccupancyState.OCCUPIED);
-        long reserved = spaceRepository.countByZoneIdAndReservedTrue(zone.getId());
-        long outOfService = spaceRepository.countByZoneIdAndOperationalStateNot(zone.getId(), OperationalState.IN_SERVICE);
-        long available = Math.max(0, total - occupied - reserved - outOfService);
+        Counts counts = statsService.forZone(zone.getId());
+        long total = counts.total();
+        long occupied = counts.occupied();
+        long reserved = counts.reserved();
+        long available = counts.available();
         return new PublicZoneResponse(
                 zone.getId(),
                 zone.getSite().getId(),
@@ -162,14 +187,19 @@ public class PlaceService {
     }
 
     private PlaceSummaryResponse toSummary(ParkingSite site, Double latitude, Double longitude) {
-        var zones = zoneRepository.findAllBySiteId(site.getId());
-        long total = 0;
-        long occupied = 0;
-        for (var zone : zones) {
-            total += spaceRepository.countByZoneId(zone.getId());
-            occupied += spaceRepository.countByZoneIdAndOccupancyState(zone.getId(), OccupancyState.OCCUPIED);
-        }
-        long available = Math.max(0, total - occupied);
+        List<ParkingZone> zones = zoneRepository.findAllBySiteIdAndActiveTrue(site.getId());
+        Map<Long, Counts> counts = statsService.forZones(zones.stream().map(ParkingZone::getId).toList());
+        return toSummary(site, zones, counts, latitude, longitude);
+    }
+
+    private PlaceSummaryResponse toSummary(ParkingSite site, List<ParkingZone> zones, Map<Long, Counts> countsByZone,
+                                           Double latitude, Double longitude) {
+        Counts counts = SpaceStatsService.sum(zones.stream()
+                .map(zone -> countsByZone.getOrDefault(zone.getId(), Counts.EMPTY))
+                .toList());
+        long total = counts.total();
+        long occupied = counts.occupied();
+        long available = counts.available();
         Double distance = null;
         if (latitude != null && longitude != null && site.getLatitude() != null && site.getLongitude() != null) {
             distance = round2(haversineKm(latitude, longitude, site.getLatitude(), site.getLongitude()));
@@ -191,7 +221,8 @@ public class PlaceService {
                 zones.size(),
                 total,
                 available,
-                occupied);
+                occupied,
+                photoCatalog.photosFor(site.getCoverImageUrl()));
     }
 
     private List<String> splitAmenities(String amenities) {

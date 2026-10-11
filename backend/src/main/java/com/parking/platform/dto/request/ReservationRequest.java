@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotNull;
 import java.time.Instant;
 
 public record ReservationRequest(
-        @NotNull Long userId,
+        Long userId,
         @NotNull Long vehicleId,
         @NotNull Long zoneId,
         Long assignedSpaceId,

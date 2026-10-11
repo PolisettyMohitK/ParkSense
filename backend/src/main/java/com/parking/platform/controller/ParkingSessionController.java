@@ -2,7 +2,10 @@ package com.parking.platform.controller;
 
 import com.parking.platform.dto.response.ParkingSessionResponse;
 import com.parking.platform.entity.enums.SessionStatus;
-import com.parking.platform.security.SecurityUtils;
+import com.parking.platform.dto.request.PaymentRequest;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import com.parking.platform.service.ParkingSessionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -25,16 +28,18 @@ public class ParkingSessionController {
     public List<ParkingSessionResponse> findAll(
             @RequestParam(required = false) SessionStatus status,
             @RequestParam(required = false) Long spaceId) {
-        if (!SecurityUtils.isAdminOrManager()) {
-            Long currentUserId = SecurityUtils.currentUserId();
-            return currentUserId == null ? List.of() : service.findByUser(currentUserId);
-        }
         return service.findAll(status, spaceId);
     }
 
     @GetMapping("/{id}")
     public ParkingSessionResponse findById(@PathVariable Long id) {
         return service.findById(id);
+    }
+
+    /** Staff records an offline payment collected at the gate. */
+    @PostMapping("/{id}/pay")
+    public ParkingSessionResponse recordPayment(@PathVariable Long id, @Valid @RequestBody PaymentRequest request) {
+        return service.recordPayment(id, request.method());
     }
 
     @GetMapping("/spaces/{spaceId}/active")

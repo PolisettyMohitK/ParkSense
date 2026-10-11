@@ -5,36 +5,41 @@ import com.parking.platform.dto.response.ParkingZoneResponse;
 import com.parking.platform.dto.response.ZoneOccupancyResponse;
 import com.parking.platform.entity.ParkingSite;
 import com.parking.platform.entity.ParkingZone;
-import com.parking.platform.entity.enums.OccupancyState;
-import com.parking.platform.entity.enums.OperationalState;
 import com.parking.platform.exception.ConflictException;
 import com.parking.platform.exception.ResourceNotFoundException;
 import com.parking.platform.mapper.ParkingZoneMapper;
-import com.parking.platform.repository.ParkingSpaceRepository;
 import com.parking.platform.repository.ParkingZoneRepository;
+import com.parking.platform.service.SpaceStatsService.Counts;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
 public class ParkingZoneService {
 
     private final ParkingZoneRepository repository;
-    private final ParkingSpaceRepository spaceRepository;
+    private final SpaceStatsService statsService;
     private final ParkingSiteService siteService;
     private final ParkingZoneMapper mapper;
 
     @Transactional(readOnly = true)
     public List<ParkingZoneResponse> findAll() {
-        return repository.findAll().stream().map(this::enrich).toList();
+        return enrichAll(repository.findAll());
     }
 
     @Transactional(readOnly = true)
     public List<ParkingZoneResponse> findBySite(Long siteId) {
-        return repository.findAllBySiteId(siteId).stream().map(this::enrich).toList();
+        return enrichAll(repository.findAllBySiteId(siteId));
+    }
+
+    @Transactional(readOnly = true)
+    public List<ParkingZoneResponse> findActiveBySite(Long siteId) {
+        return enrichAll(repository.findAllBySiteIdAndActiveTrue(siteId));
     }
 
     @Transactional(readOnly = true)
@@ -69,17 +74,22 @@ public class ParkingZoneService {
 
     @Transactional
     public void delete(Long id) {
-        repository.delete(getEntity(id));
+        ParkingZone zone = getEntity(id);
+        try {
+            repository.delete(zone);
+            repository.flush();
+        } catch (DataIntegrityViolationException ex) {
+            throw new ConflictException("Zone has spaces, devices or bookings - deactivate it instead");
+        }
     }
 
     @Transactional(readOnly = true)
     public ZoneOccupancyResponse occupancy(Long zoneId) {
         ParkingZone zone = getEntity(zoneId);
-        Counts counts = counts(zoneId);
-        double rate = counts.total() == 0 ? 0d : (double) counts.occupied() / counts.total();
+        Counts counts = statsService.forZone(zoneId);
         return new ZoneOccupancyResponse(zone.getId(), zone.getName(), zone.getCode(),
                 counts.total(), counts.occupied(), counts.available(), counts.reserved(),
-                counts.outOfService(), rate);
+                counts.outOfService(), counts.occupancyRate());
     }
 
     public ParkingZone getEntity(Long id) {
@@ -87,23 +97,19 @@ public class ParkingZoneService {
     }
 
     private ParkingZoneResponse enrich(ParkingZone zone) {
+        return enrich(zone, statsService.forZone(zone.getId()));
+    }
+
+    private List<ParkingZoneResponse> enrichAll(List<ParkingZone> zones) {
+        Map<Long, Counts> counts = statsService.forZones(zones.stream().map(ParkingZone::getId).toList());
+        return zones.stream().map(zone -> enrich(zone, counts.getOrDefault(zone.getId(), Counts.EMPTY))).toList();
+    }
+
+    private ParkingZoneResponse enrich(ParkingZone zone, Counts counts) {
         ParkingZoneResponse base = mapper.toResponse(zone);
-        Counts counts = counts(zone.getId());
         return new ParkingZoneResponse(
                 base.id(), base.siteId(), base.siteName(), base.name(), base.code(), base.type(),
                 base.floor(), base.capacity(), base.mapImageUrl(), base.description(), base.active(),
                 counts.total(), counts.occupied(), counts.available(), base.createdAt());
-    }
-
-    private Counts counts(Long zoneId) {
-        long total = spaceRepository.countByZoneId(zoneId);
-        long occupied = spaceRepository.countByZoneIdAndOccupancyState(zoneId, OccupancyState.OCCUPIED);
-        long reserved = spaceRepository.countByZoneIdAndReservedTrue(zoneId);
-        long outOfService = spaceRepository.countByZoneIdAndOperationalStateNot(zoneId, OperationalState.IN_SERVICE);
-        long available = Math.max(0, total - occupied - reserved - outOfService);
-        return new Counts(total, occupied, available, reserved, outOfService);
-    }
-
-    private record Counts(long total, long occupied, long available, long reserved, long outOfService) {
     }
 }

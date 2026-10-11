@@ -26,6 +26,10 @@ public interface ParkingSessionRepository extends JpaRepository<ParkingSession, 
 
     long countByStatus(SessionStatus status);
 
+    boolean existsByVehicleId(Long vehicleId);
+
+    Optional<ParkingSession> findFirstByReservationIdOrderByCheckInAtDesc(Long reservationId);
+
     @Query("select avg(s.durationMinutes) from ParkingSession s where s.status = 'COMPLETED' and s.durationMinutes is not null")
     Double averageCompletedDurationMinutes();
 }

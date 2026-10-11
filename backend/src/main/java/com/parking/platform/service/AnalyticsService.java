@@ -5,21 +5,21 @@ import com.parking.platform.dto.response.HeatmapCell;
 import com.parking.platform.dto.response.UtilizationPoint;
 import com.parking.platform.entity.OccupancyEvent;
 import com.parking.platform.entity.enums.OccupancyState;
-import com.parking.platform.entity.enums.OperationalState;
 import com.parking.platform.entity.enums.ReservationStatus;
 import com.parking.platform.entity.enums.SessionStatus;
 import com.parking.platform.repository.MonitoringDeviceRepository;
 import com.parking.platform.repository.OccupancyEventRepository;
 import com.parking.platform.repository.ParkingSessionRepository;
-import com.parking.platform.repository.ParkingSpaceRepository;
 import com.parking.platform.repository.ParkingZoneRepository;
 import com.parking.platform.repository.ReservationRepository;
+import com.parking.platform.config.BookingProperties;
+import com.parking.platform.entity.ParkingZone;
+import com.parking.platform.service.SpaceStatsService.Counts;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -32,7 +32,8 @@ import java.util.TreeMap;
 public class AnalyticsService {
 
     private final ParkingZoneRepository zoneRepository;
-    private final ParkingSpaceRepository spaceRepository;
+    private final SpaceStatsService statsService;
+    private final BookingProperties properties;
     private final OccupancyEventRepository eventRepository;
     private final ReservationRepository reservationRepository;
     private final ParkingSessionRepository sessionRepository;
@@ -40,18 +41,14 @@ public class AnalyticsService {
 
     @Transactional(readOnly = true)
     public AnalyticsSummary summary() {
-        long spaces = spaceRepository.count();
-        long occupied = spaceRepository.countByOccupancyState(OccupancyState.OCCUPIED);
-        long reserved = spaceRepository.countByReservedTrue();
-        long outOfService = spaceRepository.countByOperationalStateNot(OperationalState.IN_SERVICE);
-        long available = Math.max(0, spaces - occupied - reserved - outOfService);
-        double rate = spaces == 0 ? 0d : (double) occupied / spaces;
-        long activeReservations = reservationRepository.findAllByStatus(ReservationStatus.PENDING).size()
-                + reservationRepository.findAllByStatus(ReservationStatus.CONFIRMED).size()
-                + reservationRepository.findAllByStatus(ReservationStatus.ACTIVE).size();
+        List<Long> zoneIds = zoneRepository.findAll().stream().map(ParkingZone::getId).toList();
+        Counts counts = SpaceStatsService.sum(statsService.forZones(zoneIds).values());
+        long activeReservations = reservationRepository.countByStatusIn(
+                List.of(ReservationStatus.PENDING, ReservationStatus.CONFIRMED, ReservationStatus.ACTIVE));
         Double average = sessionRepository.averageCompletedDurationMinutes();
         return new AnalyticsSummary(
-                zoneRepository.count(), spaces, occupied, available, reserved, outOfService, rate,
+                zoneIds.size(), counts.total(), counts.occupied(), counts.available(), counts.reserved(),
+                counts.outOfService(), counts.occupancyRate(),
                 eventRepository.count(), activeReservations,
                 sessionRepository.countByStatus(SessionStatus.ACTIVE),
                 average != null ? average : 0d,
@@ -63,7 +60,8 @@ public class AnalyticsService {
         List<OccupancyEvent> events = loadEvents(zoneId, from, to);
         Map<Instant, long[]> buckets = new TreeMap<>();
         for (OccupancyEvent event : events) {
-            Instant bucket = event.getOccurredAt().truncatedTo(ChronoUnit.HOURS);
+            Instant bucket = event.getOccurredAt().atZone(properties.timezone())
+                    .truncatedTo(ChronoUnit.HOURS).toInstant();
             long[] counters = buckets.computeIfAbsent(bucket, key -> new long[2]);
             if (event.getState() == OccupancyState.OCCUPIED) {
                 counters[0]++;
@@ -82,7 +80,7 @@ public class AnalyticsService {
     public List<HeatmapCell> heatmap(Long zoneId, Instant from, Instant to) {
         Map<Long, Long> counts = new HashMap<>();
         for (OccupancyEvent event : loadEvents(zoneId, from, to)) {
-            var zoned = event.getOccurredAt().atZone(ZoneOffset.UTC);
+            var zoned = event.getOccurredAt().atZone(properties.timezone());
             long key = zoned.getDayOfWeek().getValue() * 100L + zoned.getHour();
             counts.merge(key, 1L, Long::sum);
         }
@@ -96,7 +94,8 @@ public class AnalyticsService {
     }
 
     private List<OccupancyEvent> loadEvents(Long zoneId, Instant from, Instant to) {
-        Instant start = from != null ? from : Instant.EPOCH;
+        // Default to the last 30 days rather than scanning the whole event history.
+        Instant start = from != null ? from : Instant.now().minus(30, ChronoUnit.DAYS);
         Instant end = to != null ? to : Instant.now();
         return zoneId == null
                 ? eventRepository.findAllByOccurredAtBetween(start, end)

@@ -9,6 +9,7 @@ import com.parking.platform.exception.ResourceNotFoundException;
 import com.parking.platform.mapper.ParkingSiteMapper;
 import com.parking.platform.repository.ParkingSiteRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -65,7 +66,12 @@ public class ParkingSiteService {
 
     @Transactional
     public void delete(Long id) {
-        repository.delete(getEntity(id));
+        try {
+            repository.delete(getEntity(id));
+            repository.flush();
+        } catch (DataIntegrityViolationException ex) {
+            throw new ConflictException("Site still has zones - deactivate it instead");
+        }
     }
 
     public ParkingSite getEntity(Long id) {

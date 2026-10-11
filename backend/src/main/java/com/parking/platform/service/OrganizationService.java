@@ -8,6 +8,7 @@ import com.parking.platform.exception.ResourceNotFoundException;
 import com.parking.platform.mapper.OrganizationMapper;
 import com.parking.platform.repository.OrganizationRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,7 +52,12 @@ public class OrganizationService {
 
     @Transactional
     public void delete(Long id) {
-        repository.delete(getEntity(id));
+        try {
+            repository.delete(getEntity(id));
+            repository.flush();
+        } catch (DataIntegrityViolationException ex) {
+            throw new ConflictException("Organization still has sites or users - deactivate it instead");
+        }
     }
 
     public Organization getEntity(Long id) {

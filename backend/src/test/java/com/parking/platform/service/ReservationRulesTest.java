@@ -69,8 +69,8 @@ class ReservationRulesTest extends BaseServiceTest {
     }
 
     @Test
-    void autoAssignsTheFirstAvailableSpaceAndMarksItReserved() {
-        Instant start = Instant.now().plus(1, ChronoUnit.HOURS);
+    void autoAssignsTheFirstAvailableSpaceAndHoldsItWhenStartingSoon() {
+        Instant start = Instant.now().plus(5, ChronoUnit.MINUTES);
 
         var response = reservationService.create(
                 request(car.getId(), null, start, start.plus(2, ChronoUnit.HOURS)));
@@ -79,6 +79,20 @@ class ReservationRulesTest extends BaseServiceTest {
         ParkingSpace reserved = spaces.findById(firstSpace.getId()).orElseThrow();
         assertThat(reserved.isReserved()).isTrue();
         assertThat(reserved.getStatus()).isEqualTo(SpaceStatus.RESERVED);
+    }
+
+    @Test
+    void aFutureBookingDoesNotBlockTheSpaceToday() {
+        Instant start = Instant.now().plus(3, ChronoUnit.HOURS);
+        reservationService.create(request(car.getId(), firstSpace.getId(), start, start.plus(1, ChronoUnit.HOURS)));
+
+        assertThat(spaces.findById(firstSpace.getId()).orElseThrow().getStatus()).isEqualTo(SpaceStatus.AVAILABLE);
+
+        // ...but someone wanting it now, for a slot that does not overlap, still gets it.
+        asUser(otherDriver);
+        var now = reservationService.create(request(otherCar.getId(), firstSpace.getId(),
+                Instant.now(), Instant.now().plus(2, ChronoUnit.HOURS)));
+        assertThat(now.assignedSpaceId()).isEqualTo(firstSpace.getId());
     }
 
     @Test
@@ -117,14 +131,72 @@ class ReservationRulesTest extends BaseServiceTest {
     }
 
     @Test
-    void aDriverOnlySeesTheirOwnReservations() {
+    void aDriverCannotReadSomeoneElsesReservation() {
         Instant start = Instant.now().plus(1, ChronoUnit.HOURS);
-        reservationService.create(request(car.getId(), firstSpace.getId(), start, start.plus(1, ChronoUnit.HOURS)));
+        var mine = reservationService.create(
+                request(car.getId(), firstSpace.getId(), start, start.plus(1, ChronoUnit.HOURS)));
 
-        List<Reservation> mine = reservations.findAllByUserId(driver.getId());
-        List<Reservation> theirs = reservations.findAllByUserId(otherDriver.getId());
+        assertThat(reservationService.findById(mine.id()).id()).isEqualTo(mine.id());
+        asUser(otherDriver);
+        assertThatThrownBy(() -> reservationService.findById(mine.id())).isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> reservationService.cancel(mine.id())).isInstanceOf(AccessDeniedException.class);
+    }
 
-        assertThat(mine).hasSize(1);
-        assertThat(theirs).isEmpty();
+    @Test
+    void autoAssignSkipsBookedSpacesAndRejectsWhenTheZoneIsFull() {
+        Instant start = Instant.now().plus(1, ChronoUnit.HOURS);
+        Instant end = start.plus(2, ChronoUnit.HOURS);
+        var first = reservationService.create(request(car.getId(), null, start, end));
+
+        asUser(otherDriver);
+        var second = reservationService.create(request(otherCar.getId(), null, start, end));
+        assertThat(second.assignedSpaceId()).isNotEqualTo(first.assignedSpaceId());
+
+        User third = users.save(Fixtures.user(zone.getSite().getOrganization(), "third@res.dev", Role.USER, encoder));
+        Vehicle thirdCar = vehicles.save(Fixtures.vehicle(third, "KA01CC0003"));
+        asUser(third);
+        assertThatThrownBy(() -> reservationService.create(
+                new ReservationRequest(null, thirdCar.getId(), zone.getId(), null, start, end)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("No space is available");
+    }
+
+    @Test
+    void rejectsBookingsInThePastOrLongerThanADay() {
+        Instant past = Instant.now().minus(2, ChronoUnit.HOURS);
+        assertThatThrownBy(() -> reservationService.create(
+                request(car.getId(), null, past, past.plus(1, ChronoUnit.HOURS))))
+                .isInstanceOf(BadRequestException.class);
+
+        Instant start = Instant.now().plus(1, ChronoUnit.HOURS);
+        assertThatThrownBy(() -> reservationService.create(
+                request(car.getId(), null, start, start.plus(25, ChronoUnit.HOURS))))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void theSameVehicleCannotHoldTwoOverlappingBookings() {
+        Instant start = Instant.now().plus(1, ChronoUnit.HOURS);
+        reservationService.create(request(car.getId(), null, start, start.plus(2, ChronoUnit.HOURS)));
+        assertThatThrownBy(() -> reservationService.create(
+                request(car.getId(), null, start.plus(1, ChronoUnit.HOURS), start.plus(3, ChronoUnit.HOURS))))
+                .isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    void driversCannotCompleteTheirOwnBookings() {
+        Instant start = Instant.now().plus(1, ChronoUnit.HOURS);
+        var created = reservationService.create(request(car.getId(), null, start, start.plus(1, ChronoUnit.HOURS)));
+        assertThatThrownBy(() -> reservationService.complete(created.id())).isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void quotesTheEstimatedPriceAtBookingTime() {
+        Instant start = Instant.now().plus(1, ChronoUnit.HOURS);
+        var created = reservationService.create(
+                request(car.getId(), null, start, start.plus(90, ChronoUnit.MINUTES)));
+        // Rs 60/h, 1.5h rounds up to 2 started hours
+        assertThat(created.estimatedAmount()).isEqualByComparingTo("120");
+        assertThat(created.siteName()).isEqualTo(zone.getSite().getName());
     }
 }

@@ -2,6 +2,7 @@ package com.parking.platform.dto.response;
 
 import com.parking.platform.entity.enums.ReservationStatus;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 public record ReservationResponse(
@@ -18,6 +19,9 @@ public record ReservationResponse(
         ReservationStatus status,
         Instant startTime,
         Instant endTime,
+        Long siteId,
+        String siteName,
+        BigDecimal estimatedAmount,
         Instant createdAt
 ) {
 }

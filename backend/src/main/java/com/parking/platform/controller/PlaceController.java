@@ -7,12 +7,15 @@ import com.parking.platform.dto.response.PublicZoneResponse;
 import com.parking.platform.entity.enums.PlaceCategory;
 import com.parking.platform.service.PlaceService;
 import lombok.RequiredArgsConstructor;
+import com.parking.platform.dto.response.PriceQuoteResponse;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Instant;
 import java.util.List;
 
 @RestController
@@ -38,6 +41,14 @@ public class PlaceController {
             @RequestParam(required = false) Double lat,
             @RequestParam(required = false) Double lng) {
         return service.detail(siteId, lat, lng);
+    }
+
+    @GetMapping("/{siteId}/quote")
+    public PriceQuoteResponse quote(
+            @PathVariable Long siteId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant start,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant end) {
+        return service.quote(siteId, start, end);
     }
 
     @GetMapping("/{siteId}/zones")

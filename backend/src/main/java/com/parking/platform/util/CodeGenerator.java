@@ -18,6 +18,10 @@ public final class CodeGenerator {
         return generate("SES-");
     }
 
+    public static String paymentRef() {
+        return generate("PAY-");
+    }
+
     private static String generate(String prefix) {
         StringBuilder builder = new StringBuilder(prefix);
         for (int i = 0; i < 8; i++) {

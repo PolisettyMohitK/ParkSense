@@ -22,6 +22,7 @@ public record PlaceSummaryResponse(
         int zoneCount,
         long totalSpaces,
         long availableSpaces,
-        long occupiedSpaces
+        long occupiedSpaces,
+        List<String> photoUrls
 ) {
 }

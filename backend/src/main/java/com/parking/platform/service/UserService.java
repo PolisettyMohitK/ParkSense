@@ -12,7 +12,10 @@ import com.parking.platform.mapper.UserMapper;
 import com.parking.platform.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import com.parking.platform.security.SecurityUtils;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -33,6 +36,9 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public UserResponse findById(Long id) {
+        if (!SecurityUtils.isAdminOrManager() && !id.equals(SecurityUtils.currentUserId())) {
+            throw new AccessDeniedException("You can only view your own profile");
+        }
         return mapper.toResponse(getEntity(id));
     }
 
@@ -45,6 +51,7 @@ public class UserService {
             throw new ConflictException("Email already registered: " + request.email());
         }
         User entity = mapper.toEntity(request);
+        entity.setEnabled(request.enabled() == null || request.enabled());
         entity.setPasswordHash(passwordEncoder.encode(request.password()));
         entity.setRole(request.role() != null ? request.role() : Role.USER);
         applyOrganization(entity, request.organizationId());
@@ -67,7 +74,16 @@ public class UserService {
 
     @Transactional
     public void delete(Long id) {
-        repository.delete(getEntity(id));
+        if (id.equals(SecurityUtils.currentUserId())) {
+            throw new BadRequestException("You cannot delete your own account");
+        }
+        User user = getEntity(id);
+        try {
+            repository.delete(user);
+            repository.flush();
+        } catch (DataIntegrityViolationException ex) {
+            throw new ConflictException("User has bookings or vehicles on record - disable the account instead");
+        }
     }
 
     public User getEntity(Long id) {

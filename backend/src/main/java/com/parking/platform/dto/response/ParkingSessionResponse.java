@@ -1,8 +1,11 @@
 package com.parking.platform.dto.response;
 
 import com.parking.platform.entity.enums.EventSource;
+import com.parking.platform.entity.enums.PaymentMethod;
+import com.parking.platform.entity.enums.PaymentStatus;
 import com.parking.platform.entity.enums.SessionStatus;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 public record ParkingSessionResponse(
@@ -23,6 +26,11 @@ public record ParkingSessionResponse(
         Instant checkInAt,
         Instant checkOutAt,
         Long durationMinutes,
-        String note
+        String note,
+        BigDecimal amount,
+        PaymentStatus paymentStatus,
+        PaymentMethod paymentMethod,
+        String paymentRef,
+        Instant paidAt
 ) {
 }

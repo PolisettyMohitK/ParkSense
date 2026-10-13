@@ -1,4 +1,5 @@
-# Keeps the Render free-tier services warm so demos do not hit a ~50s cold start.
+# Keeps the Render API warm so demos do not hit a ~50s cold start. The vision service is
+# deliberately not pinged: two always-on free services exceed Render's 750 free hours/month.
 #
 # Set repository variables API_URL / VISION_URL (Settings -> Secrets and
 # variables -> Actions -> Variables) if the onrender.com names differ.
@@ -20,5 +21,3 @@ jobs:
         run: |
           curl -fsS --max-time 90 "$API_URL/api/health" \
             || echo "::warning::backend ping failed"
-          curl -fsS --max-time 90 "$VISION_URL/health" \
-            || echo "::warning::vision ping failed"

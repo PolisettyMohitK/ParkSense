@@ -119,7 +119,7 @@ For EAS builds, set the same variables as EAS environment variables
 
 Render free services sleep after ~15 minutes idle; the next request then takes
 ~50 seconds while the container boots. `.github/workflows/keepalive.yml` pings
-both health endpoints every 10 minutes.
+the API health endpoint every 10 minutes. The vision service is intentionally left to sleep: two always-on free services would exceed Render's 750 free instance-hours per month. For a guaranteed warm API, set `plan: starter` on `parksense-api`.
 
 - If Render assigned different hostnames, set repository variables
   `API_URL` and `VISION_URL` (Settings → Secrets and variables → Actions →

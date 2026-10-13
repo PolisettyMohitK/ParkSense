@@ -1,3 +1,4 @@
+import * as SecureStore from 'expo-secure-store'
 import * as Notifications from 'expo-notifications'
 
 Notifications.setNotificationHandler({
@@ -9,13 +10,31 @@ Notifications.setNotificationHandler({
   }),
 })
 
+const NOTIFY_KEY = 'parksense.notifyOccupancy'
+
 let occupancyNotifications = false
 
-export function setOccupancyNotifications(enabled: boolean) {
-  occupancyNotifications = enabled
+export function occupancyNotificationsEnabled() {
+  return occupancyNotifications
 }
 
-export function occupancyNotificationsEnabled() {
+export async function setOccupancyNotifications(enabled: boolean): Promise<void> {
+  occupancyNotifications = enabled
+  try {
+    await SecureStore.setItemAsync(NOTIFY_KEY, enabled ? 'true' : 'false')
+  } catch {
+    /* preference persistence is best-effort */
+  }
+}
+
+/** Restore the persisted preference; call once on app start before the UI reads it. */
+export async function loadOccupancyNotifications(): Promise<boolean> {
+  try {
+    const value = await SecureStore.getItemAsync(NOTIFY_KEY)
+    occupancyNotifications = value === 'true'
+  } catch {
+    occupancyNotifications = false
+  }
   return occupancyNotifications
 }
 

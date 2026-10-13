@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
-  Box,
   Button,
   Card,
   CardContent,
@@ -23,6 +22,7 @@ import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded'
 import CloudUploadRoundedIcon from '@mui/icons-material/CloudUploadRounded'
 import { useSnackbar } from 'notistack'
 import PageHeader from '../components/PageHeader'
+import { WireframeMark } from '../components/Stark'
 import { spacesApi, zonesApi } from '../api/parking'
 import { occupancyApi } from '../api/occupancy'
 import { apiErrorMessage } from '../api/client'
@@ -65,6 +65,25 @@ function slotsFromSpaces(spaces: ParkingSpace[]): DetectSlot[] {
     }
   }
   return slots
+}
+
+function CameraIdle() {
+  return (
+    <div
+      style={{
+        minHeight: 320,
+        display: 'grid',
+        placeItems: 'center',
+        textAlign: 'center',
+        color: 'var(--color-text-secondary)',
+      }}
+    >
+      <div style={{ display: 'grid', gap: 10, justifyItems: 'center' }}>
+        <WireframeMark size={120} />
+        <div style={{ fontSize: 15 }}>Choose a photo of the parking area to begin.</div>
+      </div>
+    </div>
+  )
 }
 
 export default function CameraPage() {
@@ -205,8 +224,9 @@ export default function CameraPage() {
   const overlay = proposeResult?.overlay ?? detectResult?.overlay ?? null
 
   return (
-    <Box>
+    <div>
       <PageHeader
+        overline="Vision"
         title="Camera capture"
         subtitle="Upload a lot photo to propose parking slots, or detect live occupancy on an existing zone."
         action={
@@ -371,27 +391,15 @@ export default function CameraPage() {
         <Grid item xs={12} lg={8}>
           <Card sx={{ height: '100%' }}>
             <CardContent>
-              {!image && (
-                <Box sx={{ minHeight: 320, display: 'grid', placeItems: 'center' }}>
-                  <Stack alignItems="center" spacing={1}>
-                    <PhotoCameraRoundedIcon sx={{ fontSize: 48, color: 'text.secondary' }} />
-                    <Typography color="text.secondary">
-                      Choose a photo of the parking area to begin.
-                    </Typography>
-                  </Stack>
-                </Box>
-              )}
+              {!image ? <CameraIdle /> : null}
 
-              {image && (
-                <Box sx={{ position: 'relative' }}>
-                  <Box
-                    component="img"
-                    src={overlay ? `data:image/png;base64,${overlay}` : previewUrl ?? ''}
-                    alt="parking analysis"
-                    sx={{ width: '100%', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
-                  />
-                </Box>
-              )}
+              {image ? (
+                <img
+                  src={overlay ? `data:image/png;base64,${overlay}` : previewUrl ?? ''}
+                  alt="parking analysis"
+                  style={{ width: '100%', borderRadius: 10, border: '1px solid var(--color-hairline)' }}
+                />
+              ) : null}
 
               {proposeResult && (
                 <Stack spacing={1.5} sx={{ mt: 2 }}>
@@ -414,7 +422,7 @@ export default function CameraPage() {
                     <Chip size="small" color="success" label={`${detectResult.vacant} vacant`} />
                     <Chip size="small" variant="outlined" label={`threshold ${detectResult.threshold}`} />
                   </Stack>
-                  <Box sx={{ maxHeight: 240, overflowY: 'auto' }}>
+                  <div style={detectScroll}>
                     {detectResult.detections.map((detection) => (
                       <Stack
                         key={detection.slotId}
@@ -439,13 +447,18 @@ export default function CameraPage() {
                         </Stack>
                       </Stack>
                     ))}
-                  </Box>
+                  </div>
                 </Stack>
               )}
             </CardContent>
           </Card>
         </Grid>
       </Grid>
-    </Box>
+    </div>
   )
+}
+
+const detectScroll: import('react').CSSProperties = {
+  maxHeight: 240,
+  overflowY: 'auto',
 }

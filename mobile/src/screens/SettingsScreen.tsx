@@ -1,28 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { StyleSheet, Switch, View } from 'react-native'
-import * as SecureStore from 'expo-secure-store'
 import { AppButton, ListRow, ListSection, Screen, SegmentedControl, Title } from '../components/ui'
 import { useAuth } from '../store/AuthContext'
 import { API_BASE, VISION_BASE } from '../api/client'
-import { ensureNotificationPermission, setOccupancyNotifications } from '../notifications'
+import {
+  ensureNotificationPermission,
+  occupancyNotificationsEnabled,
+  setOccupancyNotifications,
+} from '../notifications'
 import { makeStyles, useTheme, type AppearancePreference } from '../theme/ThemeProvider'
 import { spacing } from '../theme/palette'
-
-const NOTIFY_KEY = 'parksense.notifyOccupancy'
 
 export default function SettingsScreen() {
   const { biometricAvailable, biometricEnabled, setBiometric, logout } = useAuth()
   const { colors, preference, setPreference } = useTheme()
   const styles = useStyles()
-  const [notifyEnabled, setNotifyEnabled] = useState(false)
-
-  useEffect(() => {
-    SecureStore.getItemAsync(NOTIFY_KEY).then((value) => {
-      const enabled = value === 'true'
-      setNotifyEnabled(enabled)
-      setOccupancyNotifications(enabled)
-    })
-  }, [])
+  // The persisted preference is loaded at app start; read it synchronously here.
+  const [notifyEnabled, setNotifyEnabled] = useState(occupancyNotificationsEnabled())
 
   const toggleNotifications = async (value: boolean) => {
     if (value) {
@@ -32,8 +26,7 @@ export default function SettingsScreen() {
       }
     }
     setNotifyEnabled(value)
-    setOccupancyNotifications(value)
-    await SecureStore.setItemAsync(NOTIFY_KEY, value ? 'true' : 'false')
+    await setOccupancyNotifications(value)
   }
 
   return (

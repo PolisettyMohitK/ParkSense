@@ -1,6 +1,20 @@
-import type { ReactNode } from 'react'
-import { Box, Button, Stack, Typography } from '@mui/material'
-import InboxRoundedIcon from '@mui/icons-material/InboxRounded'
+import type { CSSProperties, ReactNode } from 'react'
+import { Button, useTheme } from '@mui/material'
+import type { Theme } from '@mui/material/styles'
+import { WireframeMark } from './Stark'
+
+const titleStyle = (theme: Theme): CSSProperties => ({
+  fontSize: 16,
+  fontWeight: 600,
+  color: theme.palette.text.primary,
+})
+
+const subtitleStyle = (theme: Theme): CSSProperties => ({
+  fontSize: 15,
+  lineHeight: 1.5,
+  color: theme.palette.text.secondary,
+  maxWidth: 400,
+})
 
 interface EmptyStateProps {
   title: string
@@ -9,23 +23,33 @@ interface EmptyStateProps {
   icon?: ReactNode
 }
 
+/**
+ * One line, one action, and a wireframe mark drawn in the same visual language
+ * as the HoloLot so empty never looks broken — it looks like an empty lot.
+ */
 export default function EmptyState({ title, subtitle, action, icon }: EmptyStateProps) {
+  const theme = useTheme()
+  const mark = icon ?? <WireframeMark size={104} />
   return (
-    <Stack alignItems="center" justifyContent="center" spacing={1.5} sx={{ py: 8, textAlign: 'center' }}>
-      <Box sx={{ color: 'text.secondary', fontSize: 48, display: 'grid', placeItems: 'center' }}>
-        {icon ?? <InboxRoundedIcon sx={{ fontSize: 48 }} />}
-      </Box>
-      <Typography variant="h6">{title}</Typography>
-      {subtitle && (
-        <Typography variant="body2" color="text.secondary" maxWidth={420}>
-          {subtitle}
-        </Typography>
-      )}
-      {action && (
-        <Button variant="contained" onClick={action.onClick} sx={{ mt: 1 }}>
+    <div style={wrap}>
+      <div style={{ display: 'grid', placeItems: 'center', opacity: icon ? 1 : 0.9 }}>{mark}</div>
+      <div style={titleStyle(theme)}>{title}</div>
+      {subtitle ? <div style={subtitleStyle(theme)}>{subtitle}</div> : null}
+      {action ? (
+        <Button variant="outlined" onClick={action.onClick} sx={{ mt: 1 }}>
           {action.label}
         </Button>
-      )}
-    </Stack>
+      ) : null}
+    </div>
   )
+}
+
+const wrap: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 14,
+  padding: 'clamp(48px, 8vw, 80px) 0',
+  textAlign: 'center',
 }

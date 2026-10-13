@@ -3,22 +3,45 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { RootStackParamList } from '../navigation/types'
-import { AppButton, AppInput, Card, ChipRow, Muted, Screen, Title } from '../components/ui'
+import { AppButton, AppInput, Screen, SectionLabel, Title } from '../components/ui'
+import HoloLotView, { type HoloLotBay } from '../components/HoloLotView'
 import { useAuth } from '../store/AuthContext'
 import { apiErrorMessage } from '../api/client'
 import { spacing } from '../theme/palette'
 import { makeStyles, useTheme } from '../theme/ThemeProvider'
-
-const DEMO = [
-  { value: 'admin', label: 'Admin' },
-  { value: 'manager', label: 'Manager' },
-  { value: 'user', label: 'Driver' },
-] as const
+import { DemoPills } from '../components/DemoPills'
 
 const CREDENTIALS: Record<string, { email: string; password: string }> = {
   admin: { email: 'admin@parking.dev', password: 'admin123' },
   manager: { email: 'manager@parking.dev', password: 'manager123' },
   user: { email: 'user@parking.dev', password: 'user123' },
+}
+
+/** Deterministic ambient lot — no data needed, so the scene is always calm. */
+function idleBays(): HoloLotBay[] {
+  const bays: HoloLotBay[] = []
+  const cycle: HoloLotBay['status'][] = [
+    'AVAILABLE',
+    'OCCUPIED',
+    'AVAILABLE',
+    'OCCUPIED',
+    'RESERVED',
+    'OCCUPIED',
+    'AVAILABLE',
+    'OCCUPIED',
+  ]
+  for (let i = 0; i < 40; i += 1) {
+    const row = Math.floor(i / 8)
+    const col = i % 8
+    bays.push({
+      id: i + 1,
+      code: `${String.fromCharCode(65 + row)}${String(col + 1).padStart(2, '0')}`,
+      status: cycle[(i * 5 + row * 3) % cycle.length],
+      positionX: col * 122,
+      positionY: row === 0 ? 56 : 356,
+    })
+  }
+  return bays
 }
 
 export default function LoginScreen() {
@@ -52,16 +75,27 @@ export default function LoginScreen() {
 
   return (
     <Screen>
-      <View style={styles.hero}>
-        <View style={styles.logo}>
-          <Text style={styles.logoText}>P</Text>
-        </View>
-        <Title size={28}>ParkSense</Title>
-        <Muted>Real-time parking, in your pocket.</Muted>
+      {/* The scene sits behind the form as a dimmed band — the product's
+          signature should be visible even on a phone, just quiet. */}
+      <View style={styles.scene} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <HoloLotView
+          bays={idleBays()}
+          seed="parksense-auth"
+          colors={colors}
+          selectedBayId={null}
+          height={190}
+          showLabels={false}
+        />
+        <View style={styles.sceneScrim} pointerEvents="none" />
       </View>
 
-      <Card>
-        <Title size={18}>Sign in</Title>
+      <View style={styles.hero}>
+        <View style={styles.mark} />
+        <Title>ParkSense</Title>
+      </View>
+
+      <View style={{ gap: spacing.md }}>
+        <Title size={22}>Sign in</Title>
         <AppInput
           value={email}
           onChangeText={setEmail}
@@ -79,35 +113,53 @@ export default function LoginScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <AppButton label={loading ? 'Signing in…' : 'Sign in'} onPress={submit} loading={loading} />
         <Pressable onPress={() => navigation.navigate('Register')} accessibilityRole="link">
-          <Text style={styles.link}>New to ParkSense? Create an account</Text>
+          <Text style={styles.link}>Create an account</Text>
         </Pressable>
-      </Card>
+      </View>
 
       {__DEV__ ? (
-        <Card>
-          <Muted>Quick demo accounts (dev only)</Muted>
-          <ChipRow options={DEMO.map((item) => ({ value: item.value, label: item.label }))} value={demo} onChange={pickDemo} />
-        </Card>
+        <View style={{ marginTop: spacing.xl, gap: spacing.sm }}>
+          <SectionLabel>Demo accounts</SectionLabel>
+          <DemoPills value={demo} onChange={pickDemo} />
+        </View>
       ) : null}
 
-      <Text style={styles.footer}>Configurable Real-Time Parking Management & Analytics</Text>
+      <Text style={styles.footer}>Real-time parking management &amp; analytics</Text>
     </Screen>
   )
 }
 
-const useStyles = makeStyles((colors) => StyleSheet.create({
-  hero: { alignItems: 'center', gap: spacing.xs, marginTop: spacing.xxl, marginBottom: spacing.lg },
-  logo: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.sm,
-  },
-  logoText: { color: '#fff', fontSize: 32, fontWeight: '800' },
-  error: { color: colors.danger, fontSize: 13 },
-  link: { color: colors.text, fontWeight: '600', textAlign: 'center', paddingVertical: spacing.sm },
-  footer: { color: colors.textSecondary, fontSize: 12, textAlign: 'center', marginTop: spacing.lg },
-}))
+const useStyles = makeStyles((colors) =>
+  StyleSheet.create({
+    scene: {
+      marginHorizontal: -spacing.lg,
+      marginTop: -spacing.lg,
+      marginBottom: spacing.lg,
+      opacity: 0.55,
+      overflow: 'hidden',
+    },
+    sceneScrim: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: 70,
+      backgroundColor: colors.background,
+      opacity: 0.9,
+    },
+    hero: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xl },
+    mark: {
+      width: 24,
+      height: 24,
+      backgroundColor: colors.holo,
+    },
+    error: { color: colors.danger, fontSize: 13 },
+    link: { color: colors.text, fontWeight: '600', textAlign: 'center', paddingVertical: spacing.sm },
+    footer: {
+      color: colors.textTertiary,
+      fontSize: 11,
+      textAlign: 'center',
+      marginTop: spacing.xxl,
+    },
+  }),
+)

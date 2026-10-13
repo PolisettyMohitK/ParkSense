@@ -20,6 +20,7 @@ import { useAuth } from '../store/AuthContext'
 import { useOccupancyStream } from '../hooks/useOccupancyStream'
 import type { ParkingSpace } from '../types'
 import type { RootStackParamList } from '../navigation/types'
+import HoloLotView from '../components/HoloLotView'
 import { radius, spacing, statusMaps } from '../theme/palette'
 import { makeStyles, useTheme } from '../theme/ThemeProvider'
 
@@ -51,11 +52,13 @@ export default function ZoneDetailScreen() {
     queryClient.invalidateQueries({ queryKey: ['zones'] })
   }
 
+  const [sweepTrigger, setSweepTrigger] = useState(0)
+
   useOccupancyStream((event) => {
-    if (event.zoneId === zoneId) {
-      invalidate()
-    }
-  })
+    if (event.zoneId !== zoneId) return
+    setSweepTrigger((value) => value + 1)
+    invalidate()
+  }, { debounceMs: 400 })
 
   const occupancyMutation = useMutation({
     mutationFn: ({ spaceId, state }: { spaceId: number; state: 'OCCUPIED' | 'VACANT' }) =>
@@ -116,9 +119,18 @@ export default function ZoneDetailScreen() {
 
   const occupancy = occupancyQuery.data
   const spaces = spacesQuery.data ?? []
+  const bays = spaces.map((space) => ({
+    id: space.id,
+    code: space.code ?? `#${space.id}`,
+    status: space.status,
+    proposed: space.verificationStatus === 'PROPOSED',
+    positionX: space.positionX,
+    positionY: space.positionY,
+    polygon: space.polygon,
+  }))
 
   return (
-    <Screen>
+    <Screen floatingTabs>
       <Row between>
         <View>
           <Title size={22}>{zoneName}</Title>
@@ -149,6 +161,24 @@ export default function ZoneDetailScreen() {
       {spaces.length === 0 ? (
         <EmptyState title="No spaces yet" subtitle="Add spaces, or import proposals from the camera page." />
       ) : (
+        <>
+        {/* Operator mode: the same HoloLot scene, with the per-bay actions below. */}
+        <View style={{ marginHorizontal: -spacing.lg }}>
+          <HoloLotView
+            bays={bays}
+            seed={`zone-${zoneId}`}
+            colors={colors}
+            selectedBayId={selected?.id ?? null}
+            selectableStatuses={['AVAILABLE', 'OCCUPIED', 'RESERVED', 'OUT_OF_SERVICE']}
+            onSelectBay={(bay) => {
+              setError(null)
+              setSelected(bay ? spaces.find((space) => space.id === bay.id) ?? null : null)
+            }}
+            sweepTrigger={sweepTrigger}
+            zoneName={zoneName}
+            height={300}
+          />
+        </View>
         <View style={styles.grid}>
           {spaces.map((space) => {
             const palette = statusColors[space.status] ?? statusColors.AVAILABLE
@@ -172,6 +202,7 @@ export default function ZoneDetailScreen() {
             )
           })}
         </View>
+        </>
       )}
 
       <Modal visible={Boolean(selected)} transparent animationType="fade" onRequestClose={() => setSelected(null)}>
@@ -244,7 +275,7 @@ const useStyles = makeStyles((colors) => StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   tile: {
     width: '31%',
-    borderRadius: radius.lg,
+    borderRadius: radius.panel,
     borderWidth: 2,
     paddingVertical: spacing.lg,
     alignItems: 'center',

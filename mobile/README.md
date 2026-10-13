@@ -31,16 +31,17 @@ The API base URL is derived from the Expo dev host automatically
 
 | Area | Driver | Manager / Admin |
 |---|---|---|
-| Auth | JWT login, token in secure storage, optional biometric lock | same |
+| Auth | register, JWT login, token in secure storage, optional biometric lock | same |
 | Home | active reservation, current stay, live activity | KPIs, utilization, avg stay, live activity |
 | Zones | availability list, zone detail (read-only) | create zones, add spaces, verify/reject, In/Out occupancy, out-of-service |
 | Map | live coloured space grid | tap a space to toggle occupancy |
-| Reservations | create (zone + vehicle + duration), cancel, complete | all reservations |
-| Sessions | own stays with durations | all sessions |
+| Reservations | create (place/zone + vehicle + bay + start time, live quote), cancel, check in, check out | all reservations |
+| Sessions | own stays with durations and a payment sheet | all sessions |
 | Vehicles | add/edit/delete own vehicles | any owner |
-| Camera | — | capture/choose a photo, propose slots, import as PROPOSED spaces, detect occupancy, push events |
+| Camera | — | capture/choose a photo, propose slots (verified bay outlines where stored), import as PROPOSED spaces, detect occupancy, push events |
 | Admin | — | users, organizations, sites, devices |
-| Settings | biometric lock, occupancy notifications, API info | same |
+| Account | profile details, password change, sign out | same |
+| Settings | biometric lock, occupancy notifications (restored at launch), API info | same |
 
 ## Configuration (optional)
 
@@ -71,3 +72,16 @@ EXPO_PUBLIC_VISION_URL=http://192.168.1.50:8001
 npx tsc --noEmit          # types
 npm start                 # then press i / a, or scan with Expo Go
 ```
+
+## Deploy (EAS)
+
+Point the build at the hosted backend and vision service:
+
+```bash
+EXPO_PUBLIC_API_URL=https://parksense-api.onrender.com \
+EXPO_PUBLIC_VISION_URL=https://parksense-vision.onrender.com \
+npx eas build --profile preview
+```
+
+(or set the same variables with `eas env:create`). The app appends `/api` itself;
+see `docs/deployment.md`.

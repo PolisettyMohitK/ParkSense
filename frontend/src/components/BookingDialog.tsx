@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
   Button,
-  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -19,6 +18,7 @@ import {
   useTheme,
 } from '@mui/material'
 import { useSnackbar } from 'notistack'
+import { NumericReadout } from './Stark'
 import { placesApi } from '../api/places'
 import { reservationsApi } from '../api/reservations'
 import { usersApi, vehiclesApi } from '../api/resources'
@@ -58,11 +58,16 @@ export default function BookingDialog({ open, onClose, initial, onBooked }: Book
   const [zoneId, setZoneId] = useState<number | ''>('')
   const [spaceId, setSpaceId] = useState<number | ''>('')
   const [driverId, setDriverId] = useState<number | ''>('')
+  const [step, setStep] = useState(0)
   const [vehicleId, setVehicleId] = useState<number | ''>('')
   const [start, setStart] = useState('')
   const [end, setEnd] = useState('')
 
   // Fresh defaults every time the dialog opens, so "now" is never stale.
+  useEffect(() => {
+    if (open) setStep(0)
+  }, [open])
+
   useEffect(() => {
     if (!open) return
     const defaults = defaultBookingWindow()
@@ -156,13 +161,16 @@ export default function BookingDialog({ open, onClose, initial, onBooked }: Book
 
   const canSubmit =
     siteId !== '' && zoneId !== '' && vehicleId !== '' && !windowError && !createMutation.isPending
+  const canAdvance = step === 0 ? siteId !== '' && zoneId !== '' : vehicleId !== '' && start !== '' && end !== ''
 
   return (
     <Dialog open={open} onClose={createMutation.isPending ? undefined : onClose} maxWidth="sm" fullWidth fullScreen={fullScreen}>
-      <DialogTitle>Book parking</DialogTitle>
+      <DialogTitle sx={stepperTitle}>{STEP_LABELS[step]}</DialogTitle>
       <DialogContent>
-        <Stack spacing={2} sx={{ mt: 1 }}>
-          {isStaff && (
+        <StepRail step={step} />
+        <Stack spacing={2} sx={{ mt: 2 }}>
+          {/* Step 1 — Where: place, area, bay */}
+          {step === 0 && isStaff ? (
             <TextField
               select
               label="Driver"
@@ -180,8 +188,10 @@ export default function BookingDialog({ open, onClose, initial, onBooked }: Book
                 </MenuItem>
               ))}
             </TextField>
-          )}
+          ) : null}
 
+          {step === 0 ? (
+            <>
           <TextField
             select
             label="Place"
@@ -250,7 +260,12 @@ export default function BookingDialog({ open, onClose, initial, onBooked }: Book
               )
             })}
           </TextField>
+            </>
+          ) : null}
 
+          {/* Step 2 — When: vehicle, arrival window */}
+          {step >= 1 ? (
+            <>
           <TextField
             select
             label="Vehicle"
@@ -303,8 +318,11 @@ export default function BookingDialog({ open, onClose, initial, onBooked }: Book
               inputProps={{ min: start || undefined }}
             />
           </Stack>
+            </>
+          ) : null}
 
-          {windowError ? (
+          {/* Step 3 — Confirm: the server quote */}
+          {step < 2 ? null : windowError ? (
             <Alert severity="warning">{windowError}</Alert>
           ) : (
             <Paper variant="outlined" sx={{ p: 2 }}>
@@ -319,15 +337,15 @@ export default function BookingDialog({ open, onClose, initial, onBooked }: Book
                 <Stack direction="row" justifyContent="space-between" alignItems="center">
                   <Typography fontWeight={700}>Estimated price</Typography>
                   {quoteQuery.isFetching ? (
-                    <CircularProgress size={18} />
+                    <QuoteShimmer />
+                  ) : quoteQuery.data ? (
+                    quoteQuery.data.complimentary ? (
+                      <NumericReadout value={0} suffix="Free" size={26} color="var(--color-status-free)" />
+                    ) : (
+                      <NumericReadout value={quoteQuery.data.amount} prefix="₹" size={26} duration={300} />
+                    )
                   ) : (
-                    <Typography fontWeight={800} variant="h6">
-                      {quoteQuery.data
-                        ? quoteQuery.data.complimentary
-                          ? 'Free'
-                          : formatMoney(quoteQuery.data.amount, quoteQuery.data.currency)
-                        : '—'}
-                    </Typography>
+                    <NumericReadout value={0} prefix="₹" size={26} color="var(--color-text-tertiary)" />
                   )}
                 </Stack>
                 <Typography variant="caption" color="text.secondary">
@@ -342,15 +360,84 @@ export default function BookingDialog({ open, onClose, initial, onBooked }: Book
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose} color="inherit" disabled={createMutation.isPending}>
-          Cancel
+        <Button onClick={step === 0 ? onClose : () => setStep((value) => value - 1)} disabled={createMutation.isPending}>
+          {step === 0 ? 'Cancel' : 'Back'}
         </Button>
-        <Button variant="contained" onClick={() => createMutation.mutate()} disabled={!canSubmit}>
-          {createMutation.isPending ? 'Booking…' : 'Confirm booking'}
-        </Button>
+        {step < 2 ? (
+          <Button variant="contained" onClick={() => setStep((value) => value + 1)} disabled={!canAdvance}>
+            Continue
+          </Button>
+        ) : (
+          <Button variant="contained" onClick={() => createMutation.mutate()} disabled={!canSubmit}>
+            {createMutation.isPending ? 'Booking…' : 'Confirm booking'}
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   )
+}
+
+const STEP_LABELS = ['Where', 'When', 'Confirm'] as const
+
+/** Three quiet ticks. The active step is the only one lit. */
+function StepRail({ step }: { step: number }) {
+  return (
+    <div style={stepRail}>
+      {STEP_LABELS.map((label, index) => {
+        const lit = index <= step
+        return (
+          <div key={label} style={{ flex: 1, gap: 6 }}>
+            <div style={{ height: 2, background: lit ? 'var(--color-holo)' : 'var(--color-hairline)' }} />
+            <span style={{ ...stepLabel, color: index === step ? 'var(--color-holo)' : 'var(--color-text-tertiary)' }}>
+              {label}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/** Shimmer placeholder. A spinner is only ever used inside a button. */
+function QuoteShimmer() {
+  return (
+    <div style={shimmer}>
+      <div style={shimmerSweep} />
+    </div>
+  )
+}
+
+const stepperTitle = {
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase' as const,
+  color: 'var(--color-text-secondary)',
+}
+
+const stepRail: import('react').CSSProperties = { display: 'flex', gap: 10, marginTop: 4 }
+
+const stepLabel: import('react').CSSProperties = {
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+}
+
+const shimmer: import('react').CSSProperties = {
+  height: 20,
+  width: 110,
+  borderRadius: 6,
+  background: 'var(--color-hairline)',
+  overflow: 'hidden',
+  position: 'relative',
+}
+
+const shimmerSweep: import('react').CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  background: 'linear-gradient(90deg, transparent, var(--color-holo-soft), transparent)',
+  animation: 'starkShimmer 1400ms ease-in-out infinite',
 }
 
 function SummaryRow({ label, value }: { label: string; value: string }) {

@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
-import { Box } from '@mui/material'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { assetUrl } from '../api/client'
 
@@ -10,11 +9,14 @@ interface PlacePhotoSlideshowProps {
   photos?: string[] | null
   coverImageUrl?: string | null
   height?: number | string | { xs?: number | string; sm?: number | string; md?: number | string; lg?: number | string }
+
   autoPlayIntervalMs?: number
   /** Cycle photos automatically. Cards pass `isHovered` so only the hovered card animates. */
   autoPlay?: boolean
   isHovered?: boolean
   alt?: string
+  /** Blend the bottom of the image into the page canvas. */
+  fadeToCanvas?: boolean
 }
 
 export default function PlacePhotoSlideshow({
@@ -25,6 +27,7 @@ export default function PlacePhotoSlideshow({
   autoPlay = true,
   isHovered = false,
   alt = '',
+  fadeToCanvas = false,
 }: PlacePhotoSlideshowProps) {
   const gallery = (photos && photos.length > 0 ? photos : [coverImageUrl ?? FALLBACK]).map(
     (photo) => assetUrl(photo) ?? FALLBACK,
@@ -65,13 +68,14 @@ export default function PlacePhotoSlideshow({
   }, [playing, index, gallery])
 
   const current = gallery[index % gallery.length]
+  const resolvedHeight = typeof height === 'object' ? height.md ?? height.sm ?? height.xs : height
 
   return (
-    <Box
+    <div
       ref={containerRef}
       role={alt ? 'img' : undefined}
       aria-label={alt || undefined}
-      sx={{ width: '100%', height, position: 'relative', overflow: 'hidden', bgcolor: '#16181B' }}
+      style={{ width: '100%', height: resolvedHeight, position: 'relative', overflow: 'hidden', background: 'var(--color-canvas)' }}
     >
       <AnimatePresence initial={false}>
         <motion.div
@@ -89,14 +93,28 @@ export default function PlacePhotoSlideshow({
           }}
         />
       </AnimatePresence>
-      <Box
-        sx={{
-          position: 'absolute',
-          inset: 0,
-          background: 'linear-gradient(180deg, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0) 50%, rgba(0,0,0,0.45) 100%)',
-          pointerEvents: 'none',
-        }}
-      />
-    </Box>
+      <div style={fadeToCanvas ? canvasScrim : scrim} />
+    </div>
   )
+}
+
+const scrim: CSSProperties = {
+  position: 'absolute',
+  top: 0,
+  right: 0,
+  bottom: 0,
+  left: 0,
+  background: 'linear-gradient(180deg, rgba(0,0,0,0.16) 0%, rgba(0,0,0,0) 45%, var(--color-canvas) 100%)',
+  pointerEvents: 'none',
+}
+
+const canvasScrim: CSSProperties = {
+  position: 'absolute',
+  top: 0,
+  right: 0,
+  bottom: 0,
+  left: 0,
+  background:
+    'linear-gradient(180deg, rgba(0,0,0,0.16) 0%, rgba(0,0,0,0) 40%, var(--color-canvas) 100%)',
+  pointerEvents: 'none',
 }

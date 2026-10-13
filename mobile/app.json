@@ -31,7 +31,18 @@
     },
     "plugins": [
       "expo-secure-store",
-      "expo-local-authentication",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "ParkSense uses Face ID to unlock the app."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "ParkSense uses your location to sort parking places by distance."
+        }
+      ],
       [
         "expo-image-picker",
         {

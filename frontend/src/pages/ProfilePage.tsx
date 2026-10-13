@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Alert, Box, Button, Card, CardContent, Grid, Stack, TextField, Typography } from '@mui/material'
+import { Alert, Button, Card, CardContent, Grid, Stack, TextField, Typography } from '@mui/material'
+import type { MySession } from '../types'
 import { useSnackbar } from 'notistack'
 import PageHeader from '../components/PageHeader'
 import StatusChip from '../components/StatusChip'
@@ -20,7 +21,7 @@ export default function ProfilePage() {
   const isDriver = user?.role === 'USER'
 
   return (
-    <Box>
+    <div>
       <PageHeader title="Profile" subtitle="Your details, password and parking payments." />
       {isDriver && <ActiveStayCard />}
       <Grid container spacing={3}>
@@ -34,7 +35,7 @@ export default function ProfilePage() {
           <DuesCard />
         </Grid>
       </Grid>
-    </Box>
+    </div>
   )
 }
 
@@ -166,11 +167,11 @@ function PasswordCard() {
             helperText={problem ?? ' '}
             fullWidth
           />
-          <Box sx={{ textAlign: 'right' }}>
+          <div style={{ textAlign: 'right' }}>
             <Button type="submit" variant="contained" disabled={!current || !next || change.isPending}>
               {change.isPending ? 'Updating…' : 'Update password'}
             </Button>
-          </Box>
+          </div>
         </Stack>
       </CardContent>
     </Card>
@@ -213,12 +214,7 @@ function DuesCard() {
                 alignItems={{ sm: 'center' }}
                 sx={{ p: 1.5, borderRadius: 2, border: 1, borderColor: 'divider' }}
               >
-                <Box>
-                  <Typography fontWeight={600}>{stay.siteName ?? stay.zoneName}</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Bay {stay.spaceCode} · {stay.code}
-                  </Typography>
-                </Box>
+                <StayIdentity stay={stay} />
                 <Stack direction="row" spacing={1.5} alignItems="center">
                   <StatusChip kind="payment" value="PENDING" />
                   <Typography fontWeight={700}>{formatMoney(stay.amount)}</Typography>
@@ -233,5 +229,17 @@ function DuesCard() {
       </CardContent>
       {paymentDialog}
     </Card>
+  )
+}
+
+function StayIdentity({ stay }: { stay: MySession }) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ fontWeight: 600 }}>{stay.siteName ?? stay.zoneName}</div>
+      <div style={{ fontSize: 12, lineHeight: 1.33, color: 'var(--color-text-secondary)' }}>
+        Bay <span style={{ fontFamily: 'var(--font-mono)' }}>{stay.spaceCode}</span> ·{' '}
+        <span style={{ fontFamily: 'var(--font-mono)' }}>{stay.code}</span>
+      </div>
+    </div>
   )
 }

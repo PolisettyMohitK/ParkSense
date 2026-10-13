@@ -1,26 +1,15 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import {
-  Box,
-  Button,
-  Card,
-  Chip,
-  Divider,
-  Grid,
-  LinearProgress,
-  Stack,
-  Tab,
-  Tabs,
-  Typography,
-} from '@mui/material'
+import { Button, Stack } from '@mui/material'
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded'
-import DirectionsRoundedIcon from '@mui/icons-material/DirectionsRounded'
 import EmptyState from '../components/EmptyState'
 import ErrorState from '../components/ErrorState'
 import { PlaceDetailSkeleton } from '../components/Skeletons'
-import ParkingLot3DViewer from '../components/ParkingLot3DViewer'
 import PlacePhotoSlideshow from '../components/PlacePhotoSlideshow'
+import HoloLot from '../components/HoloLot'
+import ZoneSwitcher from '../components/PlaceZones'
+import PlaceFacts from '../components/PlaceFacts'
 import { AMENITY_LABEL, CATEGORY_LABEL, placesApi } from '../api/places'
 import { queryKeys } from '../api/queryKeys'
 import { useOccupancyStream } from '../hooks/useOccupancyStream'
@@ -29,7 +18,8 @@ import NotFoundPage from './NotFoundPage'
 import { apiErrorMessage, apiErrorStatus } from '../api/client'
 import { useUserLocation } from '../hooks/useUserLocation'
 import { formatMoney, parsePositiveInt } from '../utils/format'
-import type { OccupancyChangedEvent, PublicSpace } from '../types'
+import { toHoloLotBays, type ChangedBay } from '../utils/holoLotAdapter'
+import type { OccupancyChangedEvent, ParkingZone, PublicSpace } from '../types'
 
 export default function PlaceDetailPage() {
   const params = useParams()
@@ -39,6 +29,8 @@ export default function PlaceDetailPage() {
   const [activeZoneId, setActiveZoneId] = useState<number | null>(null)
   const [selectedSpace, setSelectedSpace] = useState<PublicSpace | null>(null)
   const [booking, setBooking] = useState<BookingTarget | null>(null)
+  const [changed, setChanged] = useState<ChangedBay>({ trigger: 0, bayId: null })
+  const [tipDismissed, setTipDismissed] = useState(false)
   const coords = { lat: location.latitude, lng: location.longitude }
 
   const placeQuery = useQuery({
@@ -62,12 +54,13 @@ export default function PlaceDetailPage() {
   useOccupancyStream(
     (event: OccupancyChangedEvent) => {
       if (!zoneIds.has(event.zoneId)) return
+      setChanged((prev) => ({ trigger: prev.trigger + 1, bayId: event.spaceId }))
       placeQuery.refetch()
       if (currentZone != null && event.zoneId === currentZone.id) {
         spacesQuery.refetch()
       }
     },
-    { debounceMs: 400 }
+    { debounceMs: 400 },
   )
 
   if (siteId === null || apiErrorStatus(placeQuery.error) === 404) {
@@ -98,282 +91,111 @@ export default function PlaceDetailPage() {
     )
   }
 
-  const { summary, description } = placeQuery.data
-  const rate = summary.totalSpaces === 0 ? 0 : Math.round((summary.occupiedSpaces / summary.totalSpaces) * 100)
+  const { summary } = placeQuery.data
   const isPaid = summary.hourlyRate != null && Number(summary.hourlyRate) > 0
   const mapsUrl =
     summary.latitude != null && summary.longitude != null
       ? `https://www.google.com/maps?q=${summary.latitude},${summary.longitude}`
       : null
-
   const spaces = spacesQuery.data ?? []
+  const bays = toHoloLotBays(spaces)
 
   return (
-    <Box>
-      <Button startIcon={<ArrowBackRoundedIcon />} onClick={() => navigate('/explore')} sx={{ mb: 1 }}>
-        Back to explore
+    <div>
+      <Button
+        startIcon={<ArrowBackRoundedIcon />}
+        onClick={() => navigate('/explore')}
+        sx={{ mb: 2, ml: -1, color: 'text.secondary' }}
+      >
+        Explore
       </Button>
 
-      <Card sx={{ overflow: 'hidden', mb: 3 }}>
-        <PlacePhotoSlideshow
-          photos={summary.photoUrls}
-          alt={`Photos of ${summary.name}`}
-          coverImageUrl={summary.coverImageUrl}
-          height={{ xs: 220, md: 340 }}
-          autoPlayIntervalMs={4500}
+      {/* Photo fades straight into the canvas - no card, no hard edge. */}
+      <PlacePhotoSlideshow
+        photos={summary.photoUrls}
+        alt={`Photos of ${summary.name}`}
+        coverImageUrl={summary.coverImageUrl}
+        height={{ xs: 190, md: 300 }}
+        autoPlayIntervalMs={5000}
+        fadeToCanvas
+      />
+
+      <PlaceFacts
+        name={summary.name}
+        category={summary.category ? CATEGORY_LABEL[summary.category] : undefined}
+        rateLabel={isPaid ? `${formatMoney(Number(summary.hourlyRate))}/hr` : 'Free for visitors'}
+        isPaid={isPaid}
+        address={[summary.organizationName, summary.address, summary.city].filter(Boolean).join(' · ')}
+        distanceKm={summary.distanceKm}
+        precise={location.precise}
+        openingHours={summary.openingHours}
+        amenities={summary.amenities.map((amenity) => AMENITY_LABEL[amenity] ?? amenity)}
+        mapsUrl={mapsUrl}
+      />
+
+      {/* The centrepiece. Full-bleed width, ~60vh on desktop. */}
+      <HoloLot
+        siteId={siteId ?? 0}
+        zoneId={currentZone?.id ?? 0}
+        zoneName={currentZone?.name}
+        bays={bays}
+        selectedBayId={selectedSpace?.id ?? null}
+        onSelectBay={(bay) => setSelectedSpace(bay ? spaces.find((s) => s.id === bay.id) ?? null : null)}
+        sweepTrigger={changed.trigger}
+        changedBayId={changed.bayId}
+        height={{ xs: 340, sm: 420, md: '58vh' } as unknown as number}
+        loading={spacesQuery.isLoading}
+        overlay={
+          zones.length > 1 ? (
+            <ZoneSwitcher zones={zones} activeZoneId={currentZone?.id ?? null} onChange={(id) => {
+              setActiveZoneId(id)
+              setSelectedSpace(null)
+            }} />
+          ) : null
+        }
+      />
+
+      {/* Bay selection continues into the existing booking flow. */}
+      <Stack direction="row" spacing={1.5} sx={{ mt: 3 }} flexWrap="wrap" useFlexGap>
+        <Button
+          variant="contained"
+          disabled={zones.length === 0 || bays.length === 0}
+          onClick={() =>
+            setBooking(
+              selectedSpace && currentZone
+                ? { siteId: siteId!, zoneId: currentZone.id, spaceId: selectedSpace.id }
+                : { siteId: siteId!, zoneId: currentZone?.id ?? null },
+            )
+          }
+        >
+          {selectedSpace ? `Reserve bay ${selectedSpace.code}` : 'Reserve a bay'}
+        </Button>
+        {zones.length === 0 || bays.length === 0 ? (
+          <Button variant="outlined" disabled>
+            No bays available here yet
+          </Button>
+        ) : null}
+      </Stack>
+
+      {!tipDismissed && zones.length > 0 ? (
+        <HowItWorks
+          isPaid={isPaid}
+          rate={summary.hourlyRate != null ? Number(summary.hourlyRate) : 0}
+          onDismiss={() => setTipDismissed(true)}
         />
-        <Box sx={{ p: { xs: 2, md: 3 } }}>
-          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-            <Typography variant="h4" fontWeight={700}>
-              {summary.name}
-            </Typography>
-            {summary.category ? <Chip label={CATEGORY_LABEL[summary.category]} size="small" /> : null}
-            <Chip
-              label={isPaid ? `${formatMoney(Number(summary.hourlyRate))}/hr` : 'Free for visitors'}
-              color={isPaid ? 'default' : 'success'}
-              size="small"
-              sx={{ fontWeight: 600 }}
-            />
-          </Stack>
-          <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-            {[summary.organizationName, summary.address, summary.city].filter(Boolean).join(' · ')}
-          </Typography>
-          <Stack direction="row" spacing={2} sx={{ mt: 1, color: 'text.secondary' }} flexWrap="wrap" useFlexGap>
-            {summary.distanceKm != null ? (
-              <Typography variant="body2">
-                {summary.distanceKm.toFixed(1)} km {location.precise ? 'away' : 'from city centre'}
-              </Typography>
-            ) : null}
-            <Typography variant="body2">
-              {isPaid ? `${formatMoney(Number(summary.hourlyRate))}/hr` : 'Free parking'}
-            </Typography>
-            {summary.openingHours ? <Typography variant="body2">{summary.openingHours}</Typography> : null}
-          </Stack>
-          {description ? (
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
-              {description}
-            </Typography>
-          ) : null}
-          <Stack direction="row" spacing={1} sx={{ mt: 2 }} flexWrap="wrap" useFlexGap>
-            {summary.amenities.map((amenity) => (
-              <Chip key={amenity} label={AMENITY_LABEL[amenity] ?? amenity} size="small" variant="outlined" />
-            ))}
-          </Stack>
-          <Stack direction="row" spacing={1.5} sx={{ mt: 2 }} flexWrap="wrap" useFlexGap>
-            <Button
-              variant="contained"
-              disabled={zones.length === 0}
-              onClick={() => setBooking({ siteId, zoneId: currentZone?.id ?? null })}
-            >
-              Reserve a bay
-            </Button>
-            {mapsUrl ? (
-              <Button
-                variant="outlined"
-                startIcon={<DirectionsRoundedIcon />}
-                href={mapsUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Directions
-              </Button>
-            ) : null}
-          </Stack>
-        </Box>
-      </Card>
+      ) : null}
 
-      <Grid container spacing={3}>
-        {/* Left Column: Stats & Guide */}
-        <Grid item xs={12} md={4}>
-          <Stack spacing={2}>
-            <Card sx={{ p: 3 }}>
-              <Typography variant="overline" color="text.secondary">
-                Live availability
-              </Typography>
-              <Stack direction="row" spacing={1} alignItems="baseline" sx={{ mt: 0.5 }}>
-                <Typography variant="h3" fontWeight={700} color={summary.availableSpaces === 0 ? 'error.main' : 'primary.main'}>
-                  {summary.availableSpaces}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  of {summary.totalSpaces} free
-                </Typography>
-              </Stack>
-              <LinearProgress
-                variant="determinate"
-                value={rate}
-                sx={{ mt: 1.5 }}
-                color={rate > 80 ? 'error' : rate > 55 ? 'warning' : 'success'}
-                aria-label={`${rate}% occupied`}
-              />
-              <Stack direction="row" spacing={2} sx={{ mt: 1.5 }}>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" display="block">
-                    Occupied
-                  </Typography>
-                  <Typography variant="subtitle2">{summary.occupiedSpaces}</Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" display="block">
-                    Areas
-                  </Typography>
-                  <Typography variant="subtitle2">{summary.zoneCount}</Typography>
-                </Box>
-                <Box>
-                  <Typography variant="caption" color="text.secondary" display="block">
-                    Tariff
-                  </Typography>
-                  <Typography variant="subtitle2">
-                    {isPaid ? `${formatMoney(Number(summary.hourlyRate))}/hr` : 'Free'}
-                  </Typography>
-                </Box>
-              </Stack>
-            </Card>
+      <ZoneList
+        zones={zones}
+        activeZoneId={currentZone?.id ?? null}
+        onView={(id) => {
+          setActiveZoneId(id)
+          setSelectedSpace(null)
+          window.scrollTo({ top: 320, behavior: 'smooth' })
+        }}
+        onReserve={(id) => setBooking({ siteId: siteId!, zoneId: id })}
+      />
 
-            <Card sx={{ p: 2.5 }}>
-              <Typography variant="subtitle2" gutterBottom>
-                How parking works here
-              </Typography>
-              <Stack spacing={1.25}>
-                {[
-                  'Pick a free bay on the lot map, or let us auto-assign one.',
-                  isPaid
-                    ? `Choose your vehicle and time - you see the price before you book (${formatMoney(Number(summary.hourlyRate))} per started hour).`
-                    : 'Choose your vehicle and time - parking here is free for visitors.',
-                  'Check in from My parking when you arrive (up to 15 minutes early); check out when you leave.',
-                ].map((line, index) => (
-                  <Stack key={line} direction="row" spacing={1.25} alignItems="flex-start">
-                    <Box
-                      sx={{
-                        width: 22,
-                        height: 22,
-                        borderRadius: '50%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        bgcolor: 'primary.main',
-                        color: 'primary.contrastText',
-                        fontSize: 12,
-                        fontWeight: 700,
-                        flexShrink: 0,
-                        mt: 0.25,
-                      }}
-                    >
-                      {index + 1}
-                    </Box>
-                    <Typography variant="body2" color="text.secondary">
-                      {line}
-                    </Typography>
-                  </Stack>
-                ))}
-              </Stack>
-            </Card>
-          </Stack>
-        </Grid>
-
-        {/* Right Column: Interactive 2.5D Map & Parking Areas */}
-        <Grid item xs={12} md={8}>
-          <Stack spacing={3}>
-            {/* Zone Switcher Tabs if multiple zones */}
-            {zones.length > 1 ? (
-              <Card sx={{ p: 1.5 }}>
-                <Tabs
-                  value={currentZone?.id ?? false}
-                  onChange={(_, val) => {
-                    setActiveZoneId(val)
-                    setSelectedSpace(null)
-                  }}
-                  variant="scrollable"
-                  scrollButtons="auto"
-                >
-                  {zones.map((z) => (
-                    <Tab
-                      key={z.id}
-                      value={z.id}
-                      label={`${z.name} (${z.availableSpaces} free)`}
-                      sx={{ fontWeight: 600 }}
-                    />
-                  ))}
-                </Tabs>
-              </Card>
-            ) : null}
-
-            {/* Interactive 3D Parking Lot Visualizer */}
-            <ParkingLot3DViewer
-              spaces={spaces}
-              selectedSpaceId={selectedSpace?.id ?? null}
-              onSelectSpace={(space) => setSelectedSpace(space)}
-              onConfirm={(space) => setBooking({ siteId, zoneId: currentZone?.id ?? null, spaceId: space.id })}
-              isLoading={spacesQuery.isLoading}
-              zoneName={currentZone?.name ?? 'Main Lot'}
-            />
-
-            {/* Parking Areas List */}
-            <Card sx={{ p: 3 }}>
-              <Typography variant="h6" fontWeight={700} gutterBottom>
-                All parking areas
-              </Typography>
-              {zones.length === 0 ? (
-                <EmptyState title="No areas configured" subtitle="This place has no zones yet." />
-              ) : (
-                <Stack divider={<Divider />} spacing={0}>
-                  {zones.map((zone) => (
-                    <Stack
-                      key={zone.id}
-                      direction={{ xs: 'column', sm: 'row' }}
-                      justifyContent="space-between"
-                      alignItems={{ xs: 'flex-start', sm: 'center' }}
-                      spacing={1}
-                      sx={{ py: 1.5 }}
-                    >
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography fontWeight={600}>{zone.name}</Typography>
-                        <Typography variant="caption" color="text.secondary" display="block">
-                          {zone.type === 'UNSTRUCTURED' ? 'Open area' : 'Structured'}
-                          {zone.floor ? ` · ${zone.floor}` : ''}
-                        </Typography>
-                        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 1 }}>
-                          <LinearProgress
-                            variant="determinate"
-                            value={
-                              zone.totalSpaces === 0
-                                ? 0
-                                : ((zone.totalSpaces - zone.availableSpaces) / zone.totalSpaces) * 100
-                            }
-                            sx={{ maxWidth: 180, flex: 1 }}
-                            color={zone.availableSpaces === 0 ? 'error' : 'success'}
-                            aria-label={`${zone.availableSpaces} of ${zone.totalSpaces} free`}
-                          />
-                          <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
-                            {zone.availableSpaces} free of {zone.totalSpaces}
-                          </Typography>
-                        </Stack>
-                      </Box>
-                      <Stack direction="row" spacing={1}>
-                        <Button
-                          variant={currentZone?.id === zone.id ? 'outlined' : 'text'}
-                          onClick={() => {
-                            setActiveZoneId(zone.id)
-                            setSelectedSpace(null)
-                          }}
-                        >
-                          {currentZone?.id === zone.id ? 'Viewing lot map' : 'View map'}
-                        </Button>
-                        <Button
-                          variant="contained"
-                          disabled={zone.availableSpaces === 0}
-                          onClick={() => setBooking({ siteId, zoneId: zone.id })}
-                        >
-                          Reserve
-                        </Button>
-                      </Stack>
-                    </Stack>
-                  ))}
-                </Stack>
-              )}
-            </Card>
-          </Stack>
-        </Grid>
-      </Grid>
       <BookingDialog
         open={booking !== null}
         initial={booking ?? undefined}
@@ -383,6 +205,125 @@ export default function PlaceDetailPage() {
           navigate('/reservations')
         }}
       />
-    </Box>
+    </div>
+  )
+}
+
+function HowItWorks({
+  isPaid,
+  rate,
+  onDismiss,
+}: {
+  isPaid: boolean
+  rate: number
+  onDismiss: () => void
+}) {
+  const lines = [
+    'Pick a free bay on the lot map, or let us auto-assign one.',
+    isPaid
+      ? `Choose your vehicle and time — you see the price before you book (${formatMoney(rate)} per started hour).`
+      : 'Choose your vehicle and time — parking here is free for visitors.',
+    'Check in from My parking when you arrive (up to 15 minutes early); check out when you leave.',
+  ]
+  return (
+    <details
+      style={{ marginTop: 32, borderTop: `1px solid var(--color-hairline)`, paddingTop: 16 }}
+      onToggle={(event) => {
+        if (!(event.currentTarget as HTMLDetailsElement).open) onDismiss()
+      }}
+    >
+      <summary
+        style={{
+          cursor: 'pointer',
+          fontSize: 11,
+          fontWeight: 600,
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          color: 'var(--color-text-secondary)',
+        }}
+      >
+        How parking works here
+      </summary>
+      <ol style={{ margin: '12px 0 0', paddingLeft: 20, color: 'var(--color-text-secondary)', fontSize: 14, lineHeight: 1.8 }}>
+        {lines.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ol>
+    </details>
+  )
+}
+
+function ZoneList({
+  zones,
+  activeZoneId,
+  onView,
+  onReserve,
+}: {
+  zones: ParkingZone[]
+  activeZoneId: number | null
+  onView: (id: number) => void
+  onReserve: (id: number) => void
+}) {
+  if (zones.length === 0) {
+    return <EmptyState title="No areas configured" subtitle="This place has no parking areas yet." />
+  }
+  return (
+    <section style={{ marginTop: 40 }}>
+      <h2
+        style={{
+          fontSize: 11,
+          fontWeight: 600,
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          color: 'var(--color-text-secondary)',
+          margin: '0 0 8px',
+        }}
+      >
+        All parking areas
+      </h2>
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+        {zones.map((zone) => (
+          <li
+            key={zone.id}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 16,
+              padding: '14px 0',
+              borderTop: '1px solid var(--color-hairline)',
+              flexWrap: 'wrap',
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>{zone.name}</div>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: 'var(--color-text-tertiary)',
+                  fontFamily: 'var(--font-mono)',
+                  marginTop: 2,
+                }}
+              >
+                {zone.availableSpaces} free / {zone.totalSpaces}
+                {zone.floor ? ` · ${zone.floor}` : ''}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button size="small" onClick={() => onView(zone.id)}>
+                {activeZoneId === zone.id ? 'Viewing' : 'View'}
+              </Button>
+              <Button
+                size="small"
+                variant="contained"
+                disabled={zone.availableSpaces === 0}
+                onClick={() => onReserve(zone.id)}
+              >
+                Reserve
+              </Button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }

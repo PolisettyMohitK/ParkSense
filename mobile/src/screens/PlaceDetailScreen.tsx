@@ -8,17 +8,21 @@ import { Ionicons } from '@expo/vector-icons'
 import {
   AppButton,
   Badge,
-  ChipRow,
+  CategoryChips,
   EmptyState,
+  Hairline,
   ListRow,
   ListSection,
   Loading,
+  Mono,
   Muted,
+  NumericReadout,
   Pill,
   Row,
+  SectionLabel,
   Title,
 } from '../components/ui'
-import ParkingLot25DView from '../components/ParkingLot25DView'
+import HoloLotView, { type HoloLotBay } from '../components/HoloLotView'
 import PlacePhotoSlideshow from '../components/PlacePhotoSlideshow'
 import { coverUrl, placesApi } from '../api/endpoints'
 import { queryKeys } from '../api/queryKeys'
@@ -47,6 +51,8 @@ export default function PlaceDetailScreen() {
 
   const [activeZoneId, setActiveZoneId] = useState<number | null>(null)
   const [selectedSpace, setSelectedSpace] = useState<PublicSpace | null>(null)
+  const [sweepTrigger, setSweepTrigger] = useState(0)
+  const [tipDismissed, setTipDismissed] = useState(false)
 
   const placeQuery = useQuery({
     queryKey: queryKeys.places.detail(siteId, { lat: location.latitude, lng: location.longitude }),
@@ -64,6 +70,7 @@ export default function PlaceDetailScreen() {
 
   useOccupancyStream(
     () => {
+      setSweepTrigger((value) => value + 1)
       placeQuery.refetch()
       if (currentZone != null) {
         spacesQuery.refetch()
@@ -95,6 +102,14 @@ export default function PlaceDetailScreen() {
   const { summary } = placeQuery.data
   const tone = availabilityTone(colors, summary.availableSpaces, summary.totalSpaces)
   const isPaid = summary.hourlyRate != null && Number(summary.hourlyRate) > 0
+  const bays: HoloLotBay[] = (spacesQuery.data ?? []).map((space) => ({
+    id: space.id,
+    code: space.code,
+    status: space.status,
+    positionX: space.positionX,
+    positionY: space.positionY,
+    polygon: space.polygon,
+  }))
 
   const openDirections = () => {
     if (summary.latitude == null || summary.longitude == null) return
@@ -183,21 +198,13 @@ export default function PlaceDetailScreen() {
             </Row>
           ) : null}
 
-          {/* Interactive 2.5D Parking Spots Map Section */}
-          <View style={styles.mapSectionHeader}>
-            <View>
-              <Title size={18}>Parking spots 2.5D map</Title>
-              <Muted>Live layout & occupancy state for this venue</Muted>
-            </View>
-          </View>
-
-          {/* Zone Selector Chips if multiple zones exist */}
+          {/* Area switcher, then the lot. The lot is the focal point. */}
           {zones.length > 1 ? (
-            <View style={{ marginVertical: spacing.xs }}>
-              <ChipRow
+            <View style={{ marginTop: spacing.sm }}>
+              <CategoryChips
                 options={zones.map((z) => ({
                   value: String(z.id),
-                  label: `${z.name} (${z.availableSpaces} free)`,
+                  label: `${z.name} · ${z.availableSpaces}`,
                 }))}
                 value={String(currentZone?.id ?? '')}
                 onChange={(val) => {
@@ -208,13 +215,65 @@ export default function PlaceDetailScreen() {
             </View>
           ) : null}
 
-          {/* 2.5D Lot Map */}
-          <ParkingLot25DView
-            spaces={spacesQuery.data ?? []}
-            selectedSpaceId={selectedSpace?.id ?? null}
-            onSelectSpace={(space) => setSelectedSpace(space)}
-            isLoading={spacesQuery.isLoading}
-          />
+          <View style={{ marginHorizontal: -spacing.lg, marginTop: spacing.sm }}>
+            {spacesQuery.isLoading ? (
+              <View style={{ paddingHorizontal: spacing.lg }}>
+                <Loading label="Mapping bays…" />
+              </View>
+            ) : (
+              <HoloLotView
+                bays={bays}
+                seed={`site-${siteId}-zone-${currentZone?.id ?? 0}`}
+                colors={colors}
+                selectedBayId={selectedSpace?.id ?? null}
+                zoneName={currentZone?.name}
+                onSelectBay={(bay) => {
+                  setSelectedSpace(bay ? (spacesQuery.data ?? []).find((space) => space.id === bay.id) ?? null : null)
+                }}
+                sweepTrigger={sweepTrigger}
+                height={340}
+              />
+            )}
+          </View>
+
+          {/* Bay selection continues into the existing booking flow. */}
+          {selectedSpace ? (
+            <View style={styles.baySheet}>
+              <Row between>
+                <Row>
+                  <Mono size={18} color={colors.text}>
+                    {selectedSpace.code}
+                  </Mono>
+                  <Badge kind="space" value={selectedSpace.status} />
+                </Row>
+                <AppButton
+                  label={`Reserve ${selectedSpace.code}`}
+                  onPress={() =>
+                    navigation.navigate('NewReservation', {
+                      siteId,
+                      zoneId: currentZone?.id,
+                      spaceId: selectedSpace.id,
+                    })
+                  }
+                  style={{ paddingHorizontal: spacing.lg }}
+                />
+              </Row>
+            </View>
+          ) : (
+            <AppButton
+              label="Reserve a bay"
+              onPress={() => navigation.navigate('NewReservation', { siteId, zoneId: currentZone?.id })}
+            />
+          )}
+
+          {!tipDismissed ? (
+            <View style={{ marginTop: spacing.sm }}>
+              <Pressable onPress={() => setTipDismissed(true)} accessibilityRole="button">
+                <Text style={styles.tip}>How parking works here · tap to dismiss</Text>
+              </Pressable>
+              <Hairline />
+            </View>
+          ) : null}
 
           {/* Area List */}
           <ListSection title="All parking areas">
@@ -289,11 +348,11 @@ const useStyles = makeStyles((colors) =>
     meta: { color: colors.textSecondary, fontSize: 13, fontWeight: '500' },
     availabilityCard: {
       backgroundColor: colors.surface,
-      borderRadius: radius.md,
+      borderRadius: radius.control,
       padding: spacing.md,
       gap: spacing.sm,
       borderWidth: 1,
-      borderColor: colors.separator,
+      borderColor: colors.hairline,
       marginTop: spacing.xs,
     },
     availabilityValue: { color: colors.text, fontSize: 15, fontWeight: '700' },
@@ -301,6 +360,23 @@ const useStyles = makeStyles((colors) =>
     progressTrack: { height: 6, borderRadius: 3, backgroundColor: colors.fill, overflow: 'hidden' },
     progressFill: { height: 6, borderRadius: 3 },
     amenities: { flexWrap: 'wrap', gap: spacing.xs, marginVertical: spacing.xs },
+    baySheet: {
+      padding: spacing.lg,
+      borderRadius: radius.panel,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.hairlineStrong,
+      backgroundColor: colors.glass,
+      gap: spacing.sm,
+    },
+    tip: {
+      fontSize: 11,
+      lineHeight: 16,
+      fontWeight: '600',
+      letterSpacing: 1.2,
+      textTransform: 'uppercase',
+      color: colors.textSecondary,
+      paddingVertical: spacing.sm,
+    },
     mapSectionHeader: {
       marginTop: spacing.sm,
       marginBottom: 2,
@@ -312,7 +388,7 @@ const useStyles = makeStyles((colors) =>
       right: 0,
       backgroundColor: colors.surface,
       borderTopWidth: 1,
-      borderTopColor: colors.separator,
+      borderTopColor: colors.hairline,
       padding: spacing.md,
       flexDirection: 'row',
       gap: spacing.md,

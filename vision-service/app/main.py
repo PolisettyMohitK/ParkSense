@@ -20,11 +20,11 @@ import time
 import zipfile
 from pathlib import Path
 
-import cv2
-import numpy as np
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
+from .auth import require_staff
+from .config import settings
 from .detection.occupancy import classify
 from .detection.slots import order_slots, propose, render_overlay
 from fastapi.responses import FileResponse
@@ -34,15 +34,19 @@ from .survey.bundle import load_bundle
 from .survey.pipeline import relayout, run_survey
 from .survey.profiles import list_profiles
 from .utils.geometry import normalize
-from .utils.imageio import decode_image, encode_png_base64
+from .utils.imageio import decode_image, encode_png_base64, read_upload
 
 app = FastAPI(title="Parking Vision Service", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=list(settings.allowed_origins),
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+    allow_credentials=False,
 )
+
+# Everything except /health requires a staff JWT.
+protected = APIRouter(dependencies=[Depends(require_staff)])
 
 bridge = BackendBridge()
 
@@ -81,7 +85,7 @@ def _parse_slots(raw: str) -> list[dict]:
     return slots
 
 
-@app.post("/slots/propose")
+@protected.post("/slots/propose")
 async def propose_slots(
     file: UploadFile = File(...),
     mode: str = Form("auto"),
@@ -91,7 +95,7 @@ async def propose_slots(
     return_overlay: bool = Form(True),
 ) -> dict:
     """Propose parking slots. mode = auto | lines | grid."""
-    image = decode_image(await file.read())
+    image = decode_image(await read_upload(file))
     height, width = image.shape[:2]
     result = propose(image, rows=rows, cols=cols, roi=_parse_roi(roi), mode=mode)
     slots = order_slots(result.slots)
@@ -120,7 +124,7 @@ async def propose_slots(
     return payload
 
 
-@app.post("/occupancy/detect")
+@protected.post("/occupancy/detect")
 async def detect_occupancy(
     file: UploadFile = File(...),
     slots: str = Form(...),
@@ -128,9 +132,11 @@ async def detect_occupancy(
     threshold: float | None = Form(None),
 ) -> dict:
     """Classify each supplied slot as occupied or vacant."""
-    image = decode_image(await file.read())
+    image = decode_image(await read_upload(file))
     slot_definitions = _parse_slots(slots)
-    reference_image = decode_image(await reference.read()) if reference is not None else None
+    reference_image = (
+        decode_image(await read_upload(reference)) if reference is not None else None
+    )
 
     detections, used_threshold = classify(
         image, slot_definitions, reference=reference_image, threshold=threshold
@@ -165,7 +171,7 @@ async def detect_occupancy(
     }
 
 
-@app.post("/pipeline/run")
+@protected.post("/pipeline/run")
 async def run_pipeline(
     file: UploadFile = File(...),
     slots: str = Form(...),
@@ -176,9 +182,11 @@ async def run_pipeline(
     reference: UploadFile | None = File(None),
 ) -> dict:
     """Detect occupancy and, when push=true, forward events to the backend."""
-    image = decode_image(await file.read())
+    image = decode_image(await read_upload(file))
     slot_definitions = _parse_slots(slots)
-    reference_image = decode_image(await reference.read()) if reference is not None else None
+    reference_image = (
+        decode_image(await read_upload(reference)) if reference is not None else None
+    )
 
     detections, used_threshold = classify(
         image, slot_definitions, reference=reference_image, threshold=threshold
@@ -224,7 +232,7 @@ async def run_pipeline(
     }
 
 
-@app.post("/bridge/reset")
+@protected.post("/bridge/reset")
 def reset_bridge() -> dict:
     """Clear the last-known-state cache (forces the next push to send everything)."""
     bridge.reset_cache()
@@ -233,13 +241,13 @@ def reset_bridge() -> dict:
 
 # --- Site survey (v2) ---------------------------------------------------------
 
-@app.get("/survey/profiles")
+@protected.get("/survey/profiles")
 def survey_profiles() -> list[dict]:
     """Parking layout profiles the admin can pick from."""
     return list_profiles()
 
 
-@app.post("/surveys")
+@protected.post("/surveys")
 async def create_survey(
     file: UploadFile = File(...),
     profile: str | None = Form(None),
@@ -253,7 +261,7 @@ async def create_survey(
     job_dir = SURVEY_ROOT / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
     archive_path = job_dir / "bundle.zip"
-    archive_path.write_bytes(await file.read())
+    archive_path.write_bytes(await read_upload(file, allow_zip=True))
 
     try:
         with zipfile.ZipFile(archive_path) as archive:
@@ -277,7 +285,7 @@ async def create_survey(
     return job
 
 
-@app.get("/surveys/{job_id}")
+@protected.get("/surveys/{job_id}")
 def get_survey(job_id: str) -> dict:
     job = SURVEY_JOBS.get(job_id)
     if job is None:
@@ -285,7 +293,7 @@ def get_survey(job_id: str) -> dict:
     return job
 
 
-@app.get("/surveys/{job_id}/artifacts/{name}")
+@protected.get("/surveys/{job_id}/artifacts/{name}")
 def get_survey_artifact(job_id: str, name: str):
     job = SURVEY_JOBS.get(job_id)
     if job is None:
@@ -296,7 +304,7 @@ def get_survey_artifact(job_id: str, name: str):
     return FileResponse(path)
 
 
-@app.post("/surveys/{job_id}/layout")
+@protected.post("/surveys/{job_id}/layout")
 def rerun_layout(job_id: str, profile: str = Form(...)) -> dict:
     """Re-run only the layout stage for another profile (no reconstruction)."""
     job = SURVEY_JOBS.get(job_id)
@@ -306,3 +314,6 @@ def rerun_layout(job_id: str, profile: str = Form(...)) -> dict:
     job["result"] = relayout(job["result"], profile, bundle)
     job["profile"] = profile
     return job
+
+
+app.include_router(protected)

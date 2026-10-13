@@ -31,9 +31,14 @@ class BackendBridge:
         self._last_state: dict[int, str] = {}
 
     def login(self, email: str | None = None, password: str | None = None) -> str:
+        resolved_password = password or settings.backend_password
+        if not resolved_password:
+            raise RuntimeError(
+                "PARKING_PASSWORD is not set; configure a staff account before pushing events"
+            )
         payload = {
             "email": email or settings.backend_user,
-            "password": password or settings.backend_password,
+            "password": resolved_password,
         }
         response = httpx.post(f"{self.base_url}/api/auth/login", json=payload, timeout=self.timeout)
         response.raise_for_status()

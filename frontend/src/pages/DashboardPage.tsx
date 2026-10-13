@@ -1,57 +1,41 @@
-import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import {
-  Box,
-  Card,
-  CardContent,
-  Grid,
-  LinearProgress,
-  Stack,
-  Typography,
-} from '@mui/material'
-import { useTheme } from '@mui/material/styles'
+import { useMemo, useState, type CSSProperties } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useTheme } from '@mui/material'
+import type { Theme } from '@mui/material/styles'
 import LocalParkingRoundedIcon from '@mui/icons-material/LocalParkingRounded'
 import GridViewRoundedIcon from '@mui/icons-material/GridViewRounded'
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded'
 import EventAvailableRoundedIcon from '@mui/icons-material/EventAvailableRounded'
-import BoltRoundedIcon from '@mui/icons-material/BoltRounded'
-import {
-  Bar,
-  BarChart,
-  Cell,
-  Legend,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
+import { useNavigate } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
 import StatCard from '../components/StatCard'
 import LoadingState from '../components/LoadingState'
-import StatusChip from '../components/StatusChip'
-import { zonesApi } from '../api/parking'
+import ErrorState from '../components/ErrorState'
+import CityOverview from '../components/CityOverview'
+import ZoneCapacityList from '../components/ZoneCapacityList'
+import { zonesApi, sitesApi } from '../api/parking'
 import { analyticsApi } from '../api/analytics'
 import { apiErrorMessage } from '../api/client'
 import { queryKeys } from '../api/queryKeys'
-import ErrorState from '../components/ErrorState'
-import { useQueryClient } from '@tanstack/react-query'
 import { useOccupancyStream } from '../hooks/useOccupancyStream'
+import { LiveDot } from '../components/Stark'
+import { radius } from '../theme'
 import type { OccupancyChangedEvent } from '../types'
-import { formatDistanceToNow } from 'date-fns'
-import { STATUS } from '../theme'
 
 export default function DashboardPage() {
   const theme = useTheme()
+  const navigate = useNavigate()
   const [liveEvents, setLiveEvents] = useState<OccupancyChangedEvent[]>([])
-
+  const [selectedSiteId, setSelectedSiteId] = useState<number | null>(null)
+  const [overviewSize, setOverviewSize] = useState({ width: 720, height: 340 })
   const queryClient = useQueryClient()
+
   const zonesQuery = useQuery({ queryKey: queryKeys.zones.list(), queryFn: () => zonesApi.list() })
   const summaryQuery = useQuery({ queryKey: queryKeys.analytics.summary, queryFn: analyticsApi.summary })
+  const sitesQuery = useQuery({ queryKey: queryKeys.sites.list(), queryFn: () => sitesApi.list() })
 
   useOccupancyStream((event) => {
-    setLiveEvents((prev) => [event, ...prev].slice(0, 8))
+    setLiveEvents((prev) => [event, ...prev].slice(0, 12))
   })
   // Counts refresh at most every couple of seconds even during bursts of camera events.
   useOccupancyStream(
@@ -65,40 +49,21 @@ export default function DashboardPage() {
   const zones = useMemo(() => zonesQuery.data ?? [], [zonesQuery.data])
   const summary = summaryQuery.data
 
-  const stats = {
-    totalSpaces: summary?.spaces ?? 0,
-    occupied: summary?.occupied ?? 0,
-    available: summary?.available ?? 0,
-    activeReservations: summary?.activeReservations ?? 0,
-  }
+  const siteCoords = useMemo(() => {
+    const map: Record<number, { lat: number; lng: number }> = {}
+    for (const site of sitesQuery.data ?? []) {
+      if (site.latitude != null && site.longitude != null) {
+        map[site.id] = { lat: site.latitude, lng: site.longitude }
+      }
+    }
+    return map
+  }, [sitesQuery.data])
 
-  // Busiest areas first so the chart stays readable with many venues.
-  const occupancyData = useMemo(
-    () =>
-      [...zones]
-        .filter((zone) => zone.totalSpaces > 0)
-        .sort((a, b) => b.occupiedSpaces / b.totalSpaces - a.occupiedSpaces / a.totalSpaces)
-        .slice(0, 10)
-        .map((zone) => ({
-          name: `${zone.siteName.split(' ')[0]} ${zone.code}`,
-          Occupied: zone.occupiedSpaces,
-          Available: zone.availableSpaces,
-        })),
-    [zones],
-  )
-
-  const statusData = useMemo(
-    () =>
-      summary
-        ? [
-            { name: 'AVAILABLE', value: summary.available },
-            { name: 'OCCUPIED', value: summary.occupied },
-            { name: 'RESERVED', value: summary.reserved },
-            { name: 'OUT_OF_SERVICE', value: summary.outOfService },
-          ].filter((entry) => entry.value > 0)
-        : [],
-    [summary],
-  )
+  const siteNameById = useMemo(() => {
+    const map: Record<number, string> = {}
+    for (const site of sitesQuery.data ?? []) map[site.id] = site.name
+    return map
+  }, [sitesQuery.data])
 
   if (zonesQuery.isLoading || summaryQuery.isLoading) {
     return <LoadingState minHeight={400} />
@@ -117,191 +82,245 @@ export default function DashboardPage() {
   }
 
   return (
-    <Box>
+    <div>
       <PageHeader
-        title="Operations dashboard"
-        subtitle="Live occupancy, capacity and reservations across all parking zones."
+        overline="Operations"
+        title="Dashboard"
+        subtitle="Live occupancy, capacity and reservations across every parking area."
       />
 
-      <Grid container spacing={2.5}>
-        <Grid item xs={12} sm={6} lg={3}>
-          <StatCard label="Zones" value={zones.length} icon={<LocalParkingRoundedIcon />} accent={theme.palette.text.primary} />
-        </Grid>
-        <Grid item xs={12} sm={6} lg={3}>
-          <StatCard label="Total spaces" value={stats.totalSpaces} icon={<GridViewRoundedIcon />} accent={theme.palette.text.primary} />
-        </Grid>
-        <Grid item xs={12} sm={6} lg={3}>
-          <StatCard
-            label="Available now"
-            value={stats.available}
-            hint={`${stats.occupied} occupied`}
-            icon={<CheckCircleRoundedIcon />}
-            accent={STATUS[theme.palette.mode === 'dark' ? 'dark' : 'light'].free}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} lg={3}>
-          <StatCard
-            label="Active reservations"
-            value={stats.activeReservations}
-            icon={<EventAvailableRoundedIcon />}
-            accent={STATUS[theme.palette.mode === 'dark' ? 'dark' : 'light'].reserved}
-          />
-        </Grid>
+      {/* Four KPI readouts in a single row. */}
+      <div style={kpiRow}>
+        <StatCard label="Zones" value={zones.length} icon={<LocalParkingRoundedIcon />} accent={theme.stark.holo} />
+        <StatCard
+          label="Total spaces"
+          value={summary?.spaces ?? 0}
+          icon={<GridViewRoundedIcon />}
+          accent={theme.stark.holo}
+        />
+        <StatCard
+          label="Available now"
+          value={summary?.available ?? 0}
+          hint={`${summary?.occupied ?? 0} occupied`}
+          icon={<CheckCircleRoundedIcon />}
+          accent={theme.stark.status.free}
+        />
+        <StatCard
+          label="Active reservations"
+          value={summary?.activeReservations ?? 0}
+          icon={<EventAvailableRoundedIcon />}
+          accent={theme.stark.status.reserved}
+        />
+      </div>
 
-        <Grid item xs={12} lg={7}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Occupancy by zone
-              </Typography>
-              <Box sx={{ height: 300 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={occupancyData} barGap={6}>
-                    <XAxis dataKey="name" stroke={theme.palette.text.secondary} />
-                    <YAxis stroke={theme.palette.text.secondary} allowDecimals={false} />
-                    <Tooltip
-                      contentStyle={{
-                        background: theme.palette.background.paper,
-                        border: `1px solid ${theme.palette.divider}`,
-                        borderRadius: 10,
-                        color: theme.palette.text.primary,
-                      }}
-                    />
-                    <Legend />
-                    <Bar
-                      dataKey="Occupied"
-                      fill={STATUS[theme.palette.mode === 'dark' ? 'dark' : 'light'].occupied}
-                      radius={[6, 6, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="Available"
-                      fill={STATUS[theme.palette.mode === 'dark' ? 'dark' : 'light'].free}
-                      radius={[6, 6, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
+      <div style={split}>
+        <section aria-label="City overview" style={panel(theme)}>
+          <header style={panelHead}>
+            <div>
+              <div style={overline}>City overview</div>
+              <div style={panelTitle}>Every venue, by position</div>
+            </div>
+            <LiveBadge />
+          </header>
+          <div
+            ref={(node) => {
+              if (!node) return
+              const rect = node.getBoundingClientRect()
+              if (rect.width > 0 && Math.abs(rect.width - overviewSize.width) > 4) {
+                setOverviewSize({ width: rect.width, height: Math.max(260, Math.min(380, rect.width * 0.46)) })
+              }
+            }}
+            style={overviewBox}
+          >
+            <CityOverview
+              zones={zones}
+              siteCoords={siteCoords}
+              width={overviewSize.width}
+              height={overviewSize.height}
+              selectedSiteId={selectedSiteId}
+              onSelect={(zone) => {
+                setSelectedSiteId(zone.siteId)
+                navigate(`/zones/${zone.id}`)
+              }}
+            />
+          </div>
+          <p style={hint(theme)}>Select a slab to open that area in operator mode.</p>
+        </section>
 
-        <Grid item xs={12} lg={5}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Space status mix
-              </Typography>
-              <Box sx={{ height: 300 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={statusData} dataKey="value" nameKey="name" innerRadius={62} outerRadius={100} paddingAngle={3}>
-                      {statusData.map((entry) => {
-                        const statusColors = STATUS[theme.palette.mode === 'dark' ? 'dark' : 'light']
-                        const fill =
-                          entry.name === 'AVAILABLE'
-                            ? statusColors.free
-                            : entry.name === 'OCCUPIED'
-                            ? statusColors.occupied
-                            : entry.name === 'RESERVED'
-                            ? statusColors.reserved
-                            : statusColors.offline
-                        return <Cell key={entry.name} fill={fill} />
-                      })}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        background: theme.palette.background.paper,
-                        border: `1px solid ${theme.palette.divider}`,
-                        borderRadius: 10,
-                        color: theme.palette.text.primary,
-                      }}
-                    />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
+        <section aria-label="Live activity" style={panel(theme)}>
+          <header style={panelHead}>
+            <div>
+              <div style={overline}>Event stream</div>
+              <div style={panelTitle}>Live activity</div>
+            </div>
+            <LiveDot />
+          </header>
+          <div style={terminal(theme)}>
+            {liveEvents.length === 0 ? (
+              <div style={terminalIdle(theme)}>
+                waiting for events… toggle a space state anywhere to see it land here
+              </div>
+            ) : (
+              liveEvents.map((event, index) => (
+                <div key={`${event.spaceId}-${event.occurredAt}-${index}`} style={logLine(theme, index)}>
+                  <span style={logTime}>
+                    {new Date(event.occurredAt).toLocaleTimeString(undefined, {
+                      hour12: false,
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                    })}
+                  </span>
+                  <span style={logText}>
+                    {(event.spaceCode ?? `#${event.spaceId}`).padEnd(6, ' ')} {event.zoneName}
+                  </span>
+                  <span style={logState(event.state)}>
+                    {event.state === 'VACANT' ? 'FREE' : event.state.toUpperCase()}
+                  </span>
+                  <span style={logSource}>{event.source.toLowerCase()}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      </div>
 
-        <Grid item xs={12} lg={7}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Zone capacity
-              </Typography>
-              <Stack spacing={2} sx={{ mt: 1 }}>
-                {zones.map((zone) => {
-                  const rate = zone.totalSpaces === 0 ? 0 : (zone.occupiedSpaces / zone.totalSpaces) * 100
-                  return (
-                    <Box key={zone.id}>
-                      <Stack direction="row" justifyContent="space-between" alignItems="center">
-                        <Typography variant="body2" fontWeight={600}>
-                          {zone.siteName} · {zone.name}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {zone.occupiedSpaces}/{zone.totalSpaces}
-                        </Typography>
-                      </Stack>
-                      <LinearProgress
-                        variant="determinate"
-                        value={rate}
-                        sx={{ mt: 0.8, height: 8, borderRadius: 4 }}
-                        color={rate > 80 ? 'error' : rate > 55 ? 'warning' : 'success'}
-                      />
-                    </Box>
-                  )
-                })}
-                {zones.length === 0 && (
-                  <Typography color="text.secondary" variant="body2">
-                    No zones configured yet.
-                  </Typography>
-                )}
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} lg={5}>
-          <Card sx={{ height: '100%' }}>
-            <CardContent>
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-                <BoltRoundedIcon color="secondary" fontSize="small" />
-                <Typography variant="h6">Live activity</Typography>
-              </Stack>
-              <Typography variant="caption" color="text.secondary">
-                Occupancy events stream in real time over WebSocket.
-              </Typography>
-              <Stack spacing={1.2} sx={{ mt: 2 }}>
-                {liveEvents.map((event, index) => (
-                  <Stack
-                    key={`${event.spaceId}-${event.occurredAt}-${index}`}
-                    direction="row"
-                    alignItems="center"
-                    justifyContent="space-between"
-                    sx={{ p: 1.2, borderRadius: 2, bgcolor: 'action.hover' }}
-                  >
-                    <Box>
-                      <Typography variant="body2" fontWeight={600}>
-                        {event.spaceCode ?? `#${event.spaceId}`} · {event.zoneName}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {event.source} · {formatDistanceToNow(new Date(event.occurredAt), { addSuffix: true })}
-                      </Typography>
-                    </Box>
-                    <StatusChip kind="space" value={event.state === 'VACANT' ? 'AVAILABLE' : event.state} />
-                  </Stack>
-                ))}
-                {liveEvents.length === 0 && (
-                  <Typography variant="body2" color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>
-                    Waiting for live events… toggle a space state to see updates here.
-                  </Typography>
-                )}
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-    </Box>
+      <section style={{ ...panel(theme), marginTop: 24 }}>
+        <header style={panelHead}>
+          <div>
+            <div style={overline}>Capacity</div>
+            <div style={panelTitle}>Zone utilisation</div>
+          </div>
+        </header>
+        <ZoneCapacityList zones={zones} siteNames={siteNameById} />
+      </section>
+    </div>
   )
+}
+
+function LiveBadge() {
+  return (
+    <span style={liveBadge}>
+      <LiveDot />
+      <span style={liveBadgeText}>LIVE</span>
+    </span>
+  )
+}
+
+const kpiRow: CSSProperties = {
+  display: 'grid',
+  gap: 16,
+  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+  marginBottom: 24,
+}
+
+const split: CSSProperties = {
+  display: 'grid',
+  gap: 24,
+  gridTemplateColumns: 'minmax(0, 1.55fr) minmax(0, 1fr)',
+  alignItems: 'start',
+}
+
+const panel = (theme: Theme): CSSProperties => ({
+  padding: 20,
+  borderRadius: radius.panel,
+  border: `1px solid ${theme.stark.hairline}`,
+  backgroundColor: theme.stark.surface,
+  boxShadow: theme.palette.mode === 'dark' ? 'inset 0 1px 0 rgba(255,255,255,0.04)' : theme.stark.shadowLight,
+})
+
+const panelHead: CSSProperties = {
+  display: 'flex',
+  alignItems: 'flex-start',
+  justifyContent: 'space-between',
+  gap: 12,
+  marginBottom: 16,
+}
+
+const overline: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase',
+  color: 'var(--color-text-secondary)',
+}
+
+const panelTitle: CSSProperties = {
+  fontSize: 17,
+  fontWeight: 600,
+  letterSpacing: '-0.01em',
+  marginTop: 4,
+}
+
+const overviewBox: CSSProperties = { width: '100%', height: 340 }
+
+const hint = (theme: Theme): CSSProperties => ({
+  fontSize: 12,
+  color: theme.palette.text.tertiary,
+  marginTop: 12,
+})
+
+const terminal = (theme: Theme): CSSProperties => ({
+  fontFamily: 'var(--font-mono)',
+  fontSize: 12,
+  lineHeight: 1.7,
+  maxHeight: 300,
+  overflowY: 'auto',
+  padding: '10px 12px',
+  borderRadius: radius.chip,
+  border: `1px solid ${theme.stark.hairline}`,
+  backgroundColor: theme.palette.mode === 'dark' ? theme.stark.surfaceSunken : 'var(--color-surface-sunken)',
+})
+
+const terminalIdle = (theme: Theme): CSSProperties => ({
+  color: theme.palette.text.tertiary,
+  fontSize: 11,
+  padding: '18px 4px',
+})
+
+const logLine = (theme: Theme, index: number): CSSProperties => ({
+  display: 'flex',
+  alignItems: 'baseline',
+  gap: 10,
+  padding: '2px 0',
+  opacity: Math.max(0.35, 1 - index * 0.07),
+  color: theme.palette.text.secondary,
+})
+
+const logTime: CSSProperties = { color: 'var(--color-text-tertiary)', flexShrink: 0 }
+
+const logText: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  color: 'var(--color-text-primary)',
+}
+
+const logSource: CSSProperties = { color: 'var(--color-text-tertiary)', flexShrink: 0 }
+
+function logState(state: string): CSSProperties {
+  return {
+    flexShrink: 0,
+    fontWeight: 600,
+    color:
+      state === 'VACANT' ? 'var(--color-status-free)' : state === 'OCCUPIED' ? 'var(--color-status-occupied)' : 'var(--color-text-tertiary)',
+  }
+}
+
+const liveBadge: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '3px 9px',
+  borderRadius: 999,
+  border: '1px solid var(--color-hairline-strong)',
+}
+
+const liveBadgeText: CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10,
+  letterSpacing: '0.1em',
+  color: 'var(--color-text-secondary)',
 }

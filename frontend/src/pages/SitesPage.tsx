@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Box,
   Button,
   Chip,
   Dialog,
@@ -173,7 +172,7 @@ export default function SitesPage() {
     !saveMutation.isPending
 
   return (
-    <Box>
+    <div>
       <PageHeader
         title="Parking sites"
         subtitle="Venues drivers can find on Explore: location, tariff and amenities."
@@ -447,6 +446,6 @@ export default function SitesPage() {
         </DialogActions>
       </Dialog>
       {confirmDialog}
-    </Box>
+    </div>
   )
 }

@@ -4,7 +4,22 @@ import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useQuery } from '@tanstack/react-query'
 import { Ionicons } from '@expo/vector-icons'
-import { AppButton, Badge, Card, EmptyState, Loading, ListRow, ListSection, Muted, Row, Screen, Title } from '../components/ui'
+import {
+  AppButton,
+  Badge,
+  Card,
+  EmptyState,
+  LiveBadge,
+  Loading,
+  ListRow,
+  ListSection,
+  Mono,
+  Muted,
+  NumericReadout,
+  Row,
+  Screen,
+  Title,
+} from '../components/ui'
 import { analyticsApi, zonesApi } from '../api/endpoints'
 import { useAuth } from '../store/AuthContext'
 import { useOccupancyStream, useSocketStatus } from '../hooks/useOccupancyStream'
@@ -46,21 +61,13 @@ export default function HomeScreen() {
   const utilization = summary ? Math.round(summary.utilizationRate * 100) : 0
 
   return (
-    <Screen>
+    <Screen floatingTabs>
       <Row between>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.kicker}>Operations</Text>
-          <Title size={30}>{user?.fullName?.split(' ')[0] ?? 'Dashboard'}</Title>
+          <Title>Dashboard</Title>
         </View>
-        <View style={styles.status}>
-          <View
-            style={[
-              styles.dot,
-              { backgroundColor: socketConnected ? colors.success : colors.textSecondary },
-            ]}
-          />
-          <Muted>{socketConnected ? 'Live' : 'Offline'}</Muted>
-        </View>
+        <LiveBadge live={socketConnected} />
       </Row>
 
       {summary ? (
@@ -76,8 +83,8 @@ export default function HomeScreen() {
 
           <Card>
             <Row between>
-              <Muted>Utilization</Muted>
-              <Text style={styles.big}>{utilization}%</Text>
+              <Text style={styles.kicker}>Utilization</Text>
+              <NumericReadout value={utilization} suffix="%" size={22} />
             </Row>
             <View style={styles.track}>
               <View

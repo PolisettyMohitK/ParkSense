@@ -137,7 +137,7 @@ export default function NewReservationScreen() {
   const quote = quoteQuery.data
 
   return (
-    <Screen>
+    <Screen floatingTabs>
       <Title size={28}>{spaceId ? `Reserve bay ${chosenSpace?.code ?? ''}` : 'Reserve a spot'}</Title>
       <Muted>
         {spaceId

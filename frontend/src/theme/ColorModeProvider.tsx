@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { CssBaseline, ThemeProvider, useMediaQuery } from '@mui/material'
 import { createAppTheme, type AppearancePreference, type ColorMode } from '../theme'
 
@@ -13,20 +13,36 @@ interface ColorModeContextValue {
 
 const ColorModeContext = createContext<ColorModeContextValue | null>(null)
 
-export function ColorModeProvider({ children }: { children: ReactNode }) {
-  const prefersDark = useMediaQuery('(prefers-color-scheme: dark)')
-  const [preference, setPreferenceState] = useState<AppearancePreference>(() => {
+function readPreference(): AppearancePreference {
+  try {
     const stored = localStorage.getItem(STORAGE_KEY)
     return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system'
-  })
-
-  const setPreference = (next: AppearancePreference) => {
-    setPreferenceState(next)
-    localStorage.setItem(STORAGE_KEY, next)
+  } catch {
+    return 'system'
   }
+}
+
+export function ColorModeProvider({ children }: { children: ReactNode }) {
+  const prefersDark = useMediaQuery('(prefers-color-scheme: dark)')
+  const [preference, setPreferenceState] = useState<AppearancePreference>(readPreference)
+
+  const setPreference = useCallback((next: AppearancePreference) => {
+    setPreferenceState(next)
+    try {
+      localStorage.setItem(STORAGE_KEY, next)
+    } catch {
+      /* private browsing */
+    }
+  }, [])
 
   const mode: ColorMode = preference === 'system' ? (prefersDark ? 'dark' : 'light') : preference
   const theme = useMemo(() => createAppTheme(mode), [mode])
+
+  // The generated index.css scopes both palettes behind [data-theme]; keep the
+  // attribute in sync so raw CSS and the MUI theme never disagree.
+  useEffect(() => {
+    document.documentElement.dataset.theme = mode
+  }, [mode])
 
   const value = useMemo<ColorModeContextValue>(
     () => ({
@@ -35,7 +51,7 @@ export function ColorModeProvider({ children }: { children: ReactNode }) {
       setPreference,
       toggle: () => setPreference(mode === 'dark' ? 'light' : 'dark'),
     }),
-    [mode, preference],
+    [mode, preference, setPreference],
   )
 
   return (

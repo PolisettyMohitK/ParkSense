@@ -232,7 +232,7 @@ export default function SurveyReviewPage() {
   const statusColors = STATUS[isDark ? 'dark' : 'light']
 
   return (
-    <Box>
+    <div>
       <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
         <Button
           startIcon={<ArrowBackRoundedIcon />}
@@ -439,7 +439,7 @@ export default function SurveyReviewPage() {
           {/* Main Inspection Viewport with Tabs */}
           <Grid item xs={12}>
             <Card sx={{ overflow: 'hidden' }}>
-              <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 2, pt: 1 }}>
+              <div style={tabBar}>
                 <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)}>
                   <Tab
                     icon={<ViewInArRoundedIcon fontSize="small" />}
@@ -460,7 +460,7 @@ export default function SurveyReviewPage() {
                     value="details"
                   />
                 </Tabs>
-              </Box>
+              </div>
 
               <CardContent sx={{ p: 0 }}>
                 {activeTab === '2.5d' && (
@@ -540,14 +540,7 @@ export default function SurveyReviewPage() {
               <MenuItem value="BUS">Bus / Truck (3.5 × 12.0 m)</MenuItem>
             </TextField>
 
-            {uploading && (
-              <Box>
-                <LinearProgress sx={{ mb: 1 }} />
-                <Typography variant="caption" color="text.secondary">
-                  Running metric ground reconstruction, terrain RANSAC, and profile layout generator…
-                </Typography>
-              </Box>
-            )}
+            {uploading ? <UploadProgress /> : null}
           </Stack>
         </DialogContent>
         <DialogActions sx={{ p: 2.5 }}>
@@ -563,7 +556,7 @@ export default function SurveyReviewPage() {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </div>
   )
 }
 
@@ -761,15 +754,10 @@ function ThreeTerrainViewer({
   }, [report, layout, isDark, wireframe])
 
   return (
-    <Box sx={{ position: 'relative' }}>
-      <Box
+    <div style={surveyStage}>
+      <div
         ref={mountRef}
-        sx={{
-          width: '100%',
-          height: 480,
-          cursor: 'grab',
-          '&:active': { cursor: 'grabbing' },
-        }}
+        style={{ width: '100%', height: 480, cursor: 'grab', touchAction: 'none' }}
       />
       <Stack
         direction="row"
@@ -794,38 +782,85 @@ function ThreeTerrainViewer({
           {wireframe ? 'Solid' : 'Wireframe'}
         </Button>
       </Stack>
-      <Box
-        sx={{
-          position: 'absolute',
-          top: 16,
-          left: 16,
-          bgcolor: 'background.paper',
-          p: 1.5,
-          borderRadius: 2,
-          border: '1px solid',
-          borderColor: 'divider',
-          maxWidth: 240,
-        }}
-      >
+      <div style={surveyLegend}>
         <Typography variant="caption" fontWeight={700} display="block" sx={{ mb: 0.5 }}>
           Elevation & Slope Legend
         </Typography>
         <Stack spacing={0.5}>
           <Stack direction="row" spacing={1} alignItems="center">
-            <Box sx={{ width: 12, height: 12, borderRadius: 0.5, bgcolor: '#d9d9dd' }} />
+            <span style={{ ...legendSwatch, background: 'var(--color-hairline-strong)' }} />
             <Typography variant="caption">Flat &lt; 2% slope</Typography>
           </Stack>
           <Stack direction="row" spacing={1} alignItems="center">
-            <Box sx={{ width: 12, height: 12, borderRadius: 0.5, bgcolor: '#b25e00' }} />
+            <span style={{ ...legendSwatch, background: 'var(--color-status-reserved)' }} />
             <Typography variant="caption">Moderate 2–5%</Typography>
           </Stack>
           <Stack direction="row" spacing={1} alignItems="center">
-            <Box sx={{ width: 12, height: 12, borderRadius: 0.5, bgcolor: '#1a7f37' }} />
+            <span style={{ ...legendSwatch, background: 'var(--color-status-proposed)' }} />
             <Typography variant="caption">Proposed bay</Typography>
           </Stack>
         </Stack>
-      </Box>
-    </Box>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Detailed breakdown of reconstruction diagnostics and map context.
+ */
+function SurveyDetailsViewer({ report }: { report: SurveyReport | null }) {
+  if (!report) return <Typography sx={{ p: 3 }}>No report loaded</Typography>
+
+  return (
+    <div style={detailsPad}>
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={6}>
+          <Typography variant="h6" gutterBottom>
+            Ground Reconstruction Details
+          </Typography>
+          <Stack spacing={1.5}>
+            <RowItem label="Pipeline Method" value={report.reconstruction?.method ?? 'Depth Fusion'} />
+            <RowItem label="Frames Processed" value={String(report.reconstruction?.framesUsed ?? '—')} />
+            <RowItem label="Metric Ground Points" value={report.reconstruction?.points?.toLocaleString() ?? '—'} />
+            <RowItem
+              label="Loop Closure Error"
+              value={
+                report.reconstruction?.loopErrorM != null
+                  ? `${report.reconstruction.loopErrorM} m`
+                  : 'N/A'
+              }
+            />
+            <RowItem label="Confidence Grade" value={report.confidence.grade.toUpperCase()} />
+          </Stack>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <Typography variant="h6" gutterBottom>
+            Terrain & Map Context (OSM)
+          </Typography>
+          <Stack spacing={1.5}>
+            <RowItem label="Roughness (mounds/ruts)" value={`${((report.terrain.roughness_mean_m ?? 0) * 100).toFixed(1)} cm`} />
+            <RowItem label="Obstacle Cells" value={String(report.terrain.obstacle_cells ?? 0)} />
+            <RowItem label="Nearby OSM Roads" value={String(report.context?.roads ?? 0)} />
+            <RowItem label="Adjacent Buildings" value={String(report.context?.buildings ?? 0)} />
+            <RowItem label="Access Candidates" value={String(report.context?.accessPoints ?? 0)} />
+          </Stack>
+        </Grid>
+      </Grid>
+    </div>
+  )
+}
+
+function RowItem({ label, value }: { label: string; value: string }) {
+  return (
+    <Stack direction="row" justifyContent="space-between" sx={{ py: 0.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+      <Typography variant="body2" color="text.secondary">
+        {label}
+      </Typography>
+      <Typography variant="body2" fontWeight={600}>
+        {value}
+      </Typography>
+    </Stack>
   )
 }
 
@@ -851,14 +886,13 @@ function TwoDPlanViewer({
   const svgHeight = (breadthM + 4) * scale
 
   return (
-    <Box sx={{ p: 3, display: 'grid', placeItems: 'center', overflowX: 'auto' }}>
-      <Box
-        sx={{
-          p: 2,
-          borderRadius: 2,
-          border: '1px solid',
-          borderColor: 'divider',
-          bgcolor: isDark ? '#161618' : '#ffffff',
+    <div style={planStage}>
+      <div
+        style={{
+          padding: 16,
+          borderRadius: 10,
+          border: '1px solid var(--color-hairline)',
+          background: 'var(--color-surface)',
         }}
       >
         <svg width={svgWidth} height={svgHeight}>
@@ -934,66 +968,52 @@ function TwoDPlanViewer({
             )
           })}
         </svg>
-      </Box>
-    </Box>
+      </div>
+    </div>
   )
 }
 
-/**
- * Detailed breakdown of reconstruction diagnostics and map context.
- */
-function SurveyDetailsViewer({ report }: { report: SurveyReport | null }) {
-  if (!report) return <Typography sx={{ p: 3 }}>No report loaded</Typography>
-
-  return (
-    <Box sx={{ p: 3 }}>
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          <Typography variant="h6" gutterBottom>
-            Ground Reconstruction Details
-          </Typography>
-          <Stack spacing={1.5}>
-            <RowItem label="Pipeline Method" value={report.reconstruction?.method ?? 'Depth Fusion'} />
-            <RowItem label="Frames Processed" value={String(report.reconstruction?.framesUsed ?? '—')} />
-            <RowItem label="Metric Ground Points" value={report.reconstruction?.points?.toLocaleString() ?? '—'} />
-            <RowItem
-              label="Loop Closure Error"
-              value={
-                report.reconstruction?.loopErrorM != null
-                  ? `${report.reconstruction.loopErrorM} m`
-                  : 'N/A'
-              }
-            />
-            <RowItem label="Confidence Grade" value={report.confidence.grade.toUpperCase()} />
-          </Stack>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Typography variant="h6" gutterBottom>
-            Terrain & Map Context (OSM)
-          </Typography>
-          <Stack spacing={1.5}>
-            <RowItem label="Roughness (mounds/ruts)" value={`${((report.terrain.roughness_mean_m ?? 0) * 100).toFixed(1)} cm`} />
-            <RowItem label="Obstacle Cells" value={String(report.terrain.obstacle_cells ?? 0)} />
-            <RowItem label="Nearby OSM Roads" value={String(report.context?.roads ?? 0)} />
-            <RowItem label="Adjacent Buildings" value={String(report.context?.buildings ?? 0)} />
-            <RowItem label="Access Candidates" value={String(report.context?.accessPoints ?? 0)} />
-          </Stack>
-        </Grid>
-      </Grid>
-    </Box>
-  )
+const planStage: import('react').CSSProperties = {
+  padding: 24,
+  display: 'grid',
+  placeItems: 'center',
+  overflowX: 'auto',
 }
 
-function RowItem({ label, value }: { label: string; value: string }) {
+const surveyStage: import('react').CSSProperties = { position: 'relative' }
+
+const surveyLegend: import('react').CSSProperties = {
+  position: 'absolute',
+  top: 16,
+  left: 16,
+  background: 'var(--color-surface)',
+  padding: 12,
+  borderRadius: 10,
+  border: '1px solid var(--color-hairline)',
+  maxWidth: 240,
+}
+
+const legendSwatch: import('react').CSSProperties = {
+  width: 12,
+  height: 12,
+  borderRadius: 2,
+  display: 'inline-block',
+}
+
+const detailsPad: import('react').CSSProperties = { padding: 24 }
+
+const tabBar: import('react').CSSProperties = {
+  borderBottom: '1px solid var(--color-hairline)',
+  padding: '8px 16px 0',
+}
+
+function UploadProgress() {
   return (
-    <Stack direction="row" justifyContent="space-between" sx={{ py: 0.5, borderBottom: '1px solid', borderColor: 'divider' }}>
-      <Typography variant="body2" color="text.secondary">
-        {label}
+    <div>
+      <LinearProgress sx={{ mb: 1 }} />
+      <Typography variant="caption" color="text.secondary">
+        Running metric ground reconstruction, terrain RANSAC, and profile layout generator…
       </Typography>
-      <Typography variant="body2" fontWeight={600}>
-        {value}
-      </Typography>
-    </Stack>
+    </div>
   )
 }

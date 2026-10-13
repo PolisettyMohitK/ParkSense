@@ -1,25 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  Box,
-  Card,
-  CardActionArea,
-  Chip,
-  Grid,
-  InputAdornment,
-  Skeleton,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material'
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded'
-import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded'
-import { motion } from 'framer-motion'
-import PageHeader from '../components/PageHeader'
+import { useTheme } from '@mui/material'
+import type { Theme } from '@mui/material/styles'
 import EmptyState from '../components/EmptyState'
 import ErrorState from '../components/ErrorState'
-import PlacePhotoSlideshow from '../components/PlacePhotoSlideshow'
+import PlaceCard from '../components/PlaceCard'
+import CategoryRow from '../components/CategoryRow'
 import { placesApi, CATEGORY_LABEL } from '../api/places'
 import { queryKeys } from '../api/queryKeys'
 import { useOccupancyStream } from '../hooks/useOccupancyStream'
@@ -28,10 +16,11 @@ import { useUserLocation } from '../hooks/useUserLocation'
 import ActiveStayCard from '../components/ActiveStayCard'
 import { apiErrorMessage } from '../api/client'
 import { formatMoney } from '../utils/format'
-import { useAppSelector } from '../store/hooks'
+import { PlaceGridSkeleton } from '../components/Skeletons'
+import { NumericReadout } from '../components/Stark'
 import type { PlaceCategory } from '../types'
 
-const CATEGORIES: { value: PlaceCategory | 'ALL'; label: string }[] = [
+const CATEGORIES: Array<{ value: PlaceCategory | 'ALL'; label: string }> = [
   { value: 'ALL', label: 'All' },
   { value: 'CAFE', label: 'Cafés' },
   { value: 'RESTAURANT', label: 'Restaurants' },
@@ -50,21 +39,6 @@ const SORT_OPTIONS = [
 
 type Sort = (typeof SORT_OPTIONS)[number]['value']
 
-/** Card-shaped skeletons so the grid does not jump when results arrive. */
-function PlaceCardSkeleton() {
-  return (
-    <Card sx={{ height: '100%', overflow: 'hidden' }}>
-      <Skeleton variant="rectangular" animation="wave" sx={{ height: 160 }} />
-      <Box sx={{ p: 2 }}>
-        <Skeleton width="70%" height={26} />
-        <Skeleton width="45%" height={18} />
-        <Skeleton width="85%" height={18} />
-        <Skeleton variant="rounded" width="100%" height={6} sx={{ mt: 1.5 }} />
-      </Box>
-    </Card>
-  )
-}
-
 function summaryLine(place: {
   category?: PlaceCategory | null
   distanceKm?: number | null
@@ -82,8 +56,8 @@ function summaryLine(place: {
 
 export default function ExplorePage() {
   const navigate = useNavigate()
+  const theme = useTheme()
   const queryClient = useQueryClient()
-  const user = useAppSelector((state) => state.auth.user)
   const coords = useUserLocation()
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<PlaceCategory | 'ALL'>('ALL')
@@ -113,7 +87,7 @@ export default function ExplorePage() {
     () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.places.all })
     },
-    { debounceMs: 400 }
+    { debounceMs: 400 },
   )
 
   const places = useMemo(() => {
@@ -130,84 +104,65 @@ export default function ExplorePage() {
   const searching = deferredQuery !== query
 
   return (
-    <Box>
-      <PageHeader
-        title={coords.precise ? 'Parking near you' : 'Parking in Hyderabad'}
-        subtitle={
-          coords.precise
-            ? 'Live availability at places around you, nearest first.'
-            : `Live availability across the city${user ? `, ${user.fullName.split(' ')[0]}` : ''}. Allow location access to sort by distance from you.`
-        }
-      />
+    <div>
+      <ActiveStayCard />
 
-      {user?.role === 'USER' && <ActiveStayCard />}
+      {/* Hero: one line, one live number, one search field. */}
+      <header style={hero}>
+        <div style={heroLine}>
+          <h1 style={heroTitle}>{coords.precise ? 'Parking near you' : 'Parking in Hyderabad'}</h1>
+          <NumericReadout
+            value={availableNearby}
+            suffix=" bays free"
+            size={18}
+            weight={500}
+            color={theme.stark.holo}
+          />
+        </div>
 
-      <Stack spacing={2} sx={{ mb: 3 }}>
-        <TextField
-          fullWidth
-          placeholder="Search cafés, malls, areas…"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchRoundedIcon fontSize="small" />
-              </InputAdornment>
-            ),
-          }}
-        />
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-          {CATEGORIES.map((item) => (
-            <Chip
-              key={item.value}
-              label={item.label}
-              clickable
-              color={category === item.value ? 'primary' : 'default'}
-              variant={category === item.value ? 'filled' : 'outlined'}
-              onClick={() => setCategory(item.value)}
-            />
-          ))}
-        </Stack>
-        <Stack
-          direction={{ xs: 'column', sm: 'row' }}
-          spacing={1.5}
-          alignItems={{ xs: 'stretch', sm: 'center' }}
-          justifyContent="space-between"
-        >
-          <Typography variant="body2" color="text.secondary" aria-live="polite">
-            {placesQuery.isFetching
-              ? 'Updating availability…'
-              : `${places.length} place${places.length === 1 ? '' : 's'} · ${availableNearby} spot${
-                  availableNearby === 1 ? '' : 's'
-                } free`}
-          </Typography>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Typography variant="body2" color="text.secondary">
-              Sort
-            </Typography>
-            {SORT_OPTIONS.map((option) => (
-              <Chip
+        <div style={searchWrap}>
+          <SearchRoundedIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search cafés, malls, areas…"
+            aria-label="Search places"
+            style={searchInput}
+          />
+          <kbd style={shortcut}>
+            <span style={{ fontSize: 11 }}>⌘K</span>
+          </kbd>
+        </div>
+
+        <CategoryRow options={CATEGORIES} value={category} onChange={setCategory} />
+      </header>
+
+      <div style={resultBar}>
+        <span aria-live="polite" style={resultCount(theme)}>
+          {placesQuery.isFetching
+            ? 'Updating availability…'
+            : `${places.length} place${places.length === 1 ? '' : 's'}`}
+        </span>
+        <div style={sortRow}>
+          {SORT_OPTIONS.map((option) => {
+            const active = sort === option.value
+            return (
+              <button
                 key={option.value}
-                label={option.label}
-                clickable
-                size="small"
-                color={sort === option.value ? 'primary' : 'default'}
-                variant={sort === option.value ? 'filled' : 'outlined'}
+                type="button"
+                aria-pressed={active}
                 onClick={() => setSort(option.value)}
-              />
-            ))}
-          </Stack>
-        </Stack>
-      </Stack>
+                style={sortChip(theme, active)}
+              >
+                {option.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
 
       {placesQuery.isLoading ? (
-        <Grid container spacing={2.5}>
-          {Array.from({ length: 6 }, (_, index) => (
-            <Grid item xs={12} sm={6} lg={4} key={index}>
-              <PlaceCardSkeleton />
-            </Grid>
-          ))}
-        </Grid>
+        <PlaceGridSkeleton count={6} />
       ) : placesQuery.isError ? (
         <ErrorState
           title="Failed to load places"
@@ -226,137 +181,108 @@ export default function ExplorePage() {
           }
         />
       ) : (
-        <Grid container spacing={2.5} sx={{ opacity: searching ? 0.6 : 1, transition: 'opacity 180ms ease' }}>
-          {places.map((place, index) => {
-            const full = place.totalSpaces > 0 && place.availableSpaces === 0
-            const isHovered = hoveredSiteId === place.siteId
-
-            return (
-              <Grid item xs={12} sm={6} lg={4} key={place.siteId}>
-                <motion.div
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  whileHover={{ y: -5, transition: { duration: 0.22, ease: [0.16, 1, 0.3, 1] } }}
-                  whileTap={{ scale: 0.985 }}
-                  transition={{ duration: 0.28, delay: Math.min(index * 0.035, 0.25) }}
-                  onMouseEnter={() => setHoveredSiteId(place.siteId)}
-                  onMouseLeave={() => setHoveredSiteId(null)}
-                  style={{ height: '100%' }}
-                >
-                  <Card
-                    sx={{
-                      height: '100%',
-                      overflow: 'hidden',
-                      transition: 'border-color 0.25s ease, box-shadow 0.25s ease',
-                      borderColor: isHovered ? 'text.secondary' : 'divider',
-                      boxShadow: isHovered
-                        ? (t) =>
-                            t.palette.mode === 'dark'
-                              ? '0 16px 36px -8px rgba(0,0,0,0.85), 0 0 0 1px rgba(255,255,255,0.12)'
-                              : '0 16px 36px -8px rgba(0,0,0,0.14), 0 0 0 1px rgba(0,0,0,0.08)'
-                        : 'none',
-                    }}
-                  >
-                    <CardActionArea
-                      onClick={() => navigate(`/places/${place.siteId}`)}
-                      sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}
-                    >
-                      <Box sx={{ position: 'relative' }}>
-                        <PlacePhotoSlideshow
-                          photos={place.photoUrls}
-                          coverImageUrl={place.coverImageUrl}
-                          height={180}
-                          autoPlay={false}
-                          isHovered={isHovered}
-                        />
-
-                        {/* Minimal translucent silver capsule for spot status */}
-                        <Box
-                          sx={{
-                            position: 'absolute',
-                            bottom: 12,
-                            left: 12,
-                            px: 1.25,
-                            py: 0.4,
-                            borderRadius: 99,
-                            bgcolor: 'rgba(10,10,12,0.72)',
-                            backdropFilter: 'blur(10px)',
-                            border: '1px solid rgba(255,255,255,0.16)',
-                            display: 'flex',
-                            alignItems: 'center',
-                          }}
-                        >
-                          <Typography
-                            sx={{
-                              color: '#FAFAFA',
-                              fontSize: '0.74rem',
-                              fontWeight: 600,
-                              letterSpacing: 0.2,
-                            }}
-                          >
-                            {full ? 'Occupied' : `${place.availableSpaces} spots free`}
-                          </Typography>
-                        </Box>
-                      </Box>
-
-                      <Box sx={{ p: 2.25, flex: 1, display: 'flex', flexDirection: 'column' }}>
-                        <Typography variant="h6" noWrap fontWeight={700}>
-                          {place.name}
-                        </Typography>
-                        <Stack
-                          direction="row"
-                          spacing={0.75}
-                          alignItems="center"
-                          sx={{ color: 'text.secondary', mt: 0.5 }}
-                        >
-                          <PlaceRoundedIcon sx={{ fontSize: 14 }} />
-                          <Typography variant="body2" noWrap>
-                            {summaryLine(place)}
-                          </Typography>
-                        </Stack>
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          noWrap
-                          display="block"
-                          sx={{ mt: 0.5 }}
-                        >
-                          {[place.address, place.city].filter(Boolean).join(', ') || 'Hyderabad'}
-                        </Typography>
-
-                        <Box
-                          sx={{
-                            mt: 'auto',
-                            pt: 1.75,
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            borderTop: 1,
-                            borderColor: 'divider',
-                          }}
-                        >
-                          <Typography variant="caption" color="text.secondary">
-                            {place.totalSpaces} total bays
-                          </Typography>
-                          <Typography
-                            variant="caption"
-                            sx={{
-                              fontWeight: 600,
-                              color: full ? 'text.secondary' : 'text.primary',
-                            }}
-                          >
-                            {full ? 'Currently full' : `${place.availableSpaces} available`}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </CardActionArea>
-                  </Card>
-                </motion.div>
-              </Grid>
-            )
-          })}
-        </Grid>
+        <div style={grid(searching)}>
+          {places.map((place, index) => (
+            <PlaceCard
+              key={place.siteId}
+              place={place}
+              index={index}
+              hovered={hoveredSiteId === place.siteId}
+              onHover={setHoveredSiteId}
+              onOpen={() => navigate(`/places/${place.siteId}`)}
+              summary={summaryLine(place)}
+            />
+          ))}
+        </div>
       )}
-    </Box>
+    </div>
   )
 }
+
+const hero: CSSProperties = { marginBottom: 28 }
+
+const heroLine: CSSProperties = {
+  display: 'flex',
+  alignItems: 'baseline',
+  gap: 14,
+  flexWrap: 'wrap',
+  marginBottom: 18,
+}
+
+const heroTitle: CSSProperties = {
+  fontSize: 'clamp(24px, 3vw, 34px)',
+  lineHeight: 1.12,
+  letterSpacing: '-0.02em',
+  fontWeight: 600,
+  margin: 0,
+}
+
+const searchWrap: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 12,
+  padding: '14px 16px',
+  marginBottom: 16,
+  borderRadius: 'var(--radius-control)',
+  border: '1px solid var(--color-hairline-strong)',
+  background: 'var(--color-surface-glass)',
+  backdropFilter: 'blur(20px) saturate(160%)',
+  WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+  transition: 'border-color 120ms cubic-bezier(0.2,0.8,0.2,1), box-shadow 120ms',
+}
+
+const searchInput: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  border: 0,
+  outline: 'none',
+  background: 'transparent',
+  color: 'var(--color-text-primary)',
+  font: 'inherit',
+  fontSize: 17,
+}
+
+const shortcut: CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 11,
+  color: 'var(--color-text-tertiary)',
+  padding: '2px 6px',
+  borderRadius: 6,
+  border: '1px solid var(--color-hairline)',
+  lineHeight: 1.6,
+}
+
+const resultBar: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
+  flexWrap: 'wrap',
+  marginBottom: 16,
+}
+
+const resultCount = (theme: Theme): CSSProperties => ({
+  fontSize: 13,
+  color: theme.palette.text.secondary,
+})
+
+const sortRow: CSSProperties = { display: 'flex', gap: 6 }
+
+const sortChip = (theme: Theme, active: boolean): CSSProperties => ({
+  padding: '4px 10px',
+  borderRadius: 999,
+  border: `1px solid ${active ? theme.stark.holo : theme.stark.hairline}`,
+  background: active ? theme.stark.holoSoft : 'transparent',
+  color: active ? theme.stark.holo : theme.palette.text.secondary,
+  font: 'inherit',
+  fontSize: 12,
+  cursor: 'pointer',
+})
+
+const grid = (dimmed: boolean): CSSProperties => ({
+  display: 'grid',
+  gap: 24,
+  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+  opacity: dimmed ? 0.6 : 1,
+  transition: 'opacity 180ms cubic-bezier(0.2,0.8,0.2,1)',
+})

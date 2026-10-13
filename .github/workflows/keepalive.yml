@@ -1,0 +1,24 @@
+# Keeps the Render free-tier services warm so demos do not hit a ~50s cold start.
+#
+# Set repository variables API_URL / VISION_URL (Settings -> Secrets and
+# variables -> Actions -> Variables) if the onrender.com names differ.
+name: keep-alive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    env:
+      API_URL: ${{ vars.API_URL || 'https://parksense-api.onrender.com' }}
+      VISION_URL: ${{ vars.VISION_URL || 'https://parksense-vision.onrender.com' }}
+    steps:
+      - name: Ping health endpoints
+        run: |
+          curl -fsS --max-time 90 "$API_URL/api/health" \
+            || echo "::warning::backend ping failed"
+          curl -fsS --max-time 90 "$VISION_URL/health" \
+            || echo "::warning::vision ping failed"

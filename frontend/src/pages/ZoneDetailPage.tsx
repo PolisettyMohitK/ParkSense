@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Box,
   Button,
   Card,
   CardContent,
@@ -31,6 +30,10 @@ import { useSnackbar } from 'notistack'
 import PageHeader from '../components/PageHeader'
 import LoadingState from '../components/LoadingState'
 import StatusChip from '../components/StatusChip'
+import HoloLot from '../components/HoloLot'
+import OperatorBaySheet from '../components/OperatorBaySheet'
+import OccupancyStrip from '../components/OccupancyStrip'
+import { toHoloLotBays } from '../utils/holoLotAdapter'
 import { spacesApi, zonesApi } from '../api/parking'
 import { occupancyApi } from '../api/occupancy'
 import { apiErrorMessage, apiErrorStatus } from '../api/client'
@@ -86,6 +89,8 @@ export default function ZoneDetailPage() {
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null)
   const [menuSpace, setMenuSpace] = useState<ParkingSpace | null>(null)
   const [confirm, confirmDialog] = useConfirm()
+  const [selectedSpaceId, setSelectedSpaceId] = useState<number | null>(null)
+  const [changed, setChanged] = useState<{ trigger: number; bayId: number | null }>({ trigger: 0, bayId: null })
 
   const enabled = parsedId !== null
   const zoneQuery = useQuery({ queryKey: queryKeys.zones.detail(id), queryFn: () => zonesApi.get(id), enabled })
@@ -103,9 +108,9 @@ export default function ZoneDetailPage() {
   }
 
   useOccupancyStream((event) => {
-    if (event.zoneId === id) {
-      invalidate()
-    }
+    if (event.zoneId !== id) return
+    setChanged((prev) => ({ trigger: prev.trigger + 1, bayId: event.spaceId }))
+    invalidate()
   })
 
   const occupancyMutation = useMutation({
@@ -192,6 +197,7 @@ export default function ZoneDetailPage() {
   const zone = zoneQuery.data
   const spaces = spacesQuery.data ?? []
   const occupancy = occupancyQuery.data
+  const selectedSpace = spaces.find((space) => space.id === selectedSpaceId) ?? null
 
   const openEdit = (space: ParkingSpace) => {
     setForm({
@@ -209,14 +215,15 @@ export default function ZoneDetailPage() {
   }
 
   return (
-    <Box>
-      <Button startIcon={<ArrowBackRoundedIcon />} onClick={() => navigate('/zones')} sx={{ mb: 1 }}>
-        Back to zones
+    <div>
+      <Button startIcon={<ArrowBackRoundedIcon />} onClick={() => navigate('/zones')} sx={{ mb: 2, ml: -1, color: 'text.secondary' }}>
+        Zones
       </Button>
 
       <PageHeader
+        overline={zone?.siteName ?? undefined}
         title={zone?.name ?? 'Zone'}
-        subtitle={`${zone?.siteName ?? ''} · ${zone?.code ?? ''} · ${
+        subtitle={`${zone?.code ?? ''} · ${zone?.floor ?? 'Ground'} · ${
           zone?.type === 'UNSTRUCTURED' ? 'Image-mapped area' : 'Structured'
         }`}
         action={
@@ -235,29 +242,44 @@ export default function ZoneDetailPage() {
         }
       />
 
-      {occupancy && (
-        <Grid container spacing={2} sx={{ mb: 3 }}>
-          {[
-            { label: 'Total', value: occupancy.totalSpaces, color: 'text.primary' },
-            { label: 'Occupied', value: occupancy.occupied, color: 'error.main' },
-            { label: 'Available', value: occupancy.available, color: 'success.main' },
-            { label: 'Reserved', value: occupancy.reserved, color: 'warning.main' },
-          ].map((item) => (
-            <Grid item xs={6} md={3} key={item.label}>
-              <Card>
-                <CardContent>
-                  <Typography variant="overline" color="text.secondary">
-                    {item.label}
-                  </Typography>
-                  <Typography variant="h4" fontWeight={700} color={item.color}>
-                    {item.value}
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      )}
+      {occupancy ? <OccupancyStrip occupancy={occupancy} /> : null}
+
+      {/* Operator mode: the same HoloLot scene, with per-bay actions. */}
+      {spaces.length > 0 ? (
+        <HoloLot
+          siteId={zone?.siteId ?? 0}
+          zoneId={id}
+          zoneName={zone?.name}
+          bays={toHoloLotBays(spaces)}
+          selectedBayId={selectedSpaceId}
+          onSelectBay={(bay) => setSelectedSpaceId(bay ? bay.id : null)}
+          selectableStatuses={['AVAILABLE', 'OCCUPIED', 'RESERVED', 'OUT_OF_SERVICE']}
+          sweepTrigger={changed.trigger}
+          changedBayId={changed.bayId}
+          height={460}
+        />
+      ) : null}
+
+      {selectedSpace ? (
+        <OperatorBaySheet
+          space={selectedSpace}
+          canManage={canManage}
+          busy={occupancyMutation.isPending}
+          onMarkOccupied={() =>
+            occupancyMutation.mutate({ spaceId: selectedSpace.id, state: 'OCCUPIED' })
+          }
+          onMarkVacant={() => occupancyMutation.mutate({ spaceId: selectedSpace.id, state: 'VACANT' })}
+          onOutOfService={async () => {
+            const ok = await confirm({
+              title: 'Take bay out of service?',
+              message: `${selectedSpace.code ?? selectedSpace.id} will stop accepting bookings until it is returned to service.`,
+              confirmLabel: 'Out of service',
+            })
+            if (ok) operationalStateMutation.mutate({ spaceId: selectedSpace.id, state: 'OUT_OF_SERVICE' })
+          }}
+          onClose={() => setSelectedSpaceId(null)}
+        />
+      ) : null}
 
       {spaces.length === 0 ? (
         <Card>
@@ -281,16 +303,7 @@ export default function ZoneDetailPage() {
               >
                 <CardContent sx={{ pb: '12px !important' }}>
                   <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-                    <Box>
-                      <Typography variant="h6" fontWeight={700}>
-                        {space.code ?? '—'}
-                      </Typography>
-                      {space.label && (
-                        <Typography variant="caption" color="text.secondary">
-                          {space.label}
-                        </Typography>
-                      )}
-                    </Box>
+                    <SpaceIdentity code={space.code} label={space.label} />
                     {canManage && (
                       <IconButton
                         size="small"
@@ -508,6 +521,17 @@ export default function ZoneDetailPage() {
         </DialogActions>
       </Dialog>
       {confirmDialog}
-    </Box>
+    </div>
+  )
+}
+
+function SpaceIdentity({ code, label }: { code?: string | null; label?: string | null }) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 600, letterSpacing: '0.03em' }}>
+        {code ?? '—'}
+      </div>
+      {label ? <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{label}</div> : null}
+    </div>
   )
 }

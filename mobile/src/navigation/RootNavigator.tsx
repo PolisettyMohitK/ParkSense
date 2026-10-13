@@ -1,6 +1,7 @@
 import { DarkTheme, DefaultTheme, NavigationContainer, type Theme } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
+import { StyleSheet, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import LoginScreen from '../screens/LoginScreen'
 import RegisterScreen from '../screens/RegisterScreen'
@@ -32,6 +33,29 @@ import type { RootStackParamList, TabParamList } from './types'
 const Stack = createNativeStackNavigator<RootStackParamList>()
 const Tab = createBottomTabNavigator<TabParamList>()
 
+/**
+ * Tab icon: the active tab gets a holo halo above it, so the indicator is not
+ * colour-only.
+ */
+function TabGlyph({ name, color }: { name: keyof typeof Ionicons.glyphMap; color: string }) {
+  const active = color !== undefined
+  return (
+    <View style={[styles.tabGlyph, active ? { backgroundColor: 'rgba(92,225,255,0.10)' } : null]}>
+      <Ionicons name={name} size={20} color={color} />
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  tabGlyph: {
+    width: 44,
+    height: 30,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+})
+
 const TAB_ICONS: Record<keyof TabParamList, keyof typeof Ionicons.glyphMap> = {
   Explore: 'compass-outline',
   Home: 'stats-chart-outline',
@@ -42,6 +66,10 @@ const TAB_ICONS: Record<keyof TabParamList, keyof typeof Ionicons.glyphMap> = {
   Profile: 'person-outline',
 }
 
+/**
+ * Floating glass tab bar: blurred, inset from the edges, with the active tab
+ * marked in holo. Four or five tabs, never more.
+ */
 function Tabs() {
   const { user } = useAuth()
   const { colors } = useTheme()
@@ -51,45 +79,63 @@ function Tabs() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: colors.text,
-        tabBarInactiveTintColor: colors.textSecondary,
+        tabBarActiveTintColor: colors.holo,
+        tabBarInactiveTintColor: colors.textTertiary,
+        tabBarShowLabel: false,
         tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.separator,
+          position: 'absolute',
+          left: 14,
+          right: 14,
+          bottom: 14,
+          height: 60,
+          paddingTop: 0,
+          paddingBottom: 0,
+          backgroundColor: colors.glass,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: colors.hairlineStrong,
+          borderRadius: 16,
+          overflow: 'hidden',
+          shadowColor: '#000',
+          shadowOpacity: colors.light ? 0.12 : 0.4,
+          shadowRadius: 18,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: 8,
         },
-        tabBarIcon: ({ color, size }) => (
-          <Ionicons name={TAB_ICONS[route.name]} size={size} color={color} />
+        tabBarItemStyle: { paddingVertical: 0 },
+        tabBarIcon: ({ focused }) => (
+          <TabGlyph name={TAB_ICONS[route.name]} color={focused ? colors.holo : colors.textTertiary} />
         ),
       })}
     >
       <Tab.Screen
         name="Explore"
         component={ExploreScreen}
-        options={{ tabBarLabel: 'Explore' }}
+        options={{ tabBarAccessibilityLabel: 'Explore' }}
       />
       <Tab.Screen
         name="Bookings"
         component={BookingsScreen}
-        options={{ tabBarLabel: 'Bookings' }}
+        options={{ tabBarAccessibilityLabel: 'Bookings' }}
       />
       {isManager ? (
         <>
           <Tab.Screen
             name="Camera"
             component={CameraScreen}
-            options={{ tabBarLabel: 'Camera' }}
+            options={{ tabBarAccessibilityLabel: 'Camera' }}
           />
           <Tab.Screen
             name="Home"
             component={HomeScreen}
-            options={{ tabBarLabel: 'Operations' }}
+            options={{ tabBarAccessibilityLabel: 'Operations' }}
           />
         </>
       ) : null}
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}
-        options={{ tabBarLabel: 'Profile' }}
+        options={{ tabBarAccessibilityLabel: 'Profile' }}
       />
     </Tab.Navigator>
   )
@@ -111,21 +157,22 @@ export default function RootNavigator() {
     ...base,
     colors: {
       ...base.colors,
-      background: colors.groupedBackground,
+      background: colors.background,
       card: colors.surface,
       text: colors.text,
-      border: colors.separator,
-      primary: colors.text,
-      notification: colors.text,
+      border: colors.hairline,
+      primary: colors.holo,
+      notification: colors.holo,
     },
   }
 
   const headerOptions = {
-    headerStyle: { backgroundColor: colors.groupedBackground },
+    headerStyle: { backgroundColor: colors.background },
     headerTintColor: colors.text,
-    headerTitleStyle: { color: colors.text, fontWeight: '600' as const },
+    headerTitleStyle: { color: colors.text, fontWeight: '600' as const, fontSize: 16 },
     headerShadowVisible: false,
-    contentStyle: { backgroundColor: colors.groupedBackground },
+    headerBackTitleVisible: false,
+    contentStyle: { backgroundColor: colors.background },
   }
 
   return (

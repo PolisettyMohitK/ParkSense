@@ -7,9 +7,10 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { StyleSheet, useColorScheme } from 'react-native'
+import { useColorScheme } from 'react-native'
+import { AccessibilityInfo } from 'react-native'
 import * as SecureStore from 'expo-secure-store'
-import { darkColors, lightColors, type Palette } from './palette'
+import { darkPalette, lightPalette, type Palette } from './palette'
 
 export type AppearancePreference = 'system' | 'light' | 'dark'
 
@@ -20,6 +21,11 @@ interface ThemeContextValue {
   scheme: 'light' | 'dark'
   preference: AppearancePreference
   setPreference: (preference: AppearancePreference) => void
+  /**
+   * Mirrors the web rule: reduced motion collapses animation to fades and drops
+   * camera drift, scan sweeps and parallax entirely.
+   */
+  reducedMotion: boolean
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null)
@@ -27,6 +33,23 @@ const ThemeContext = createContext<ThemeContextValue | null>(null)
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const systemScheme = useColorScheme()
   const [preference, setPreferenceState] = useState<AppearancePreference>('system')
+  const [reducedMotion, setReducedMotion] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((enabled) => {
+        if (!cancelled) setReducedMotion(enabled)
+      })
+      .catch(() => undefined)
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', (enabled) => {
+      setReducedMotion(enabled)
+    })
+    return () => {
+      cancelled = true
+      subscription?.remove?.()
+    }
+  }, [])
 
   useEffect(() => {
     SecureStore.getItemAsync(APPEARANCE_KEY).then((stored) => {
@@ -43,11 +66,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const scheme: 'light' | 'dark' =
     preference === 'system' ? (systemScheme === 'dark' ? 'dark' : 'light') : preference
-  const colors = scheme === 'dark' ? darkColors : lightColors
+  const colors = scheme === 'dark' ? darkPalette : lightPalette
 
   const value = useMemo<ThemeContextValue>(
-    () => ({ colors, scheme, preference, setPreference }),
-    [colors, scheme, preference, setPreference],
+    () => ({ colors, scheme, preference, setPreference, reducedMotion }),
+    [colors, scheme, preference, setPreference, reducedMotion],
   )
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>

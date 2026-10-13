@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Alert, StyleSheet, Text } from 'react-native'
+import { Alert, StyleSheet, Text, View } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -9,11 +9,17 @@ import {
   Card,
   EmptyState,
   ErrorState,
+  Hairline,
+  HudPanel,
   Loading,
+  Mono,
   Muted,
+  NumericReadout,
   Row,
   Screen,
+  SectionLabel,
   SegmentedControl,
+  TimelineRow,
   Title,
 } from '../components/ui'
 import { reservationsApi, mySessionsApi } from '../api/endpoints'
@@ -23,7 +29,8 @@ import { useAuth } from '../store/AuthContext'
 import { useStayActions } from '../hooks/useStayActions'
 import type { RootStackParamList } from '../navigation/types'
 import type { Reservation } from '../types'
-import { makeStyles } from '../theme/ThemeProvider'
+import { makeStyles, useTheme } from '../theme/ThemeProvider'
+import { radius, spacing } from '../theme/palette'
 import { formatDuration, formatMoney, formatWhen } from '../utils/format'
 
 type Tab = 'upcoming' | 'active' | 'past'
@@ -42,6 +49,7 @@ export default function BookingsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const queryClient = useQueryClient()
   const styles = useStyles()
+  const { colors } = useTheme()
   const { user } = useAuth()
   const isStaff = user?.role === 'ADMIN' || user?.role === 'MANAGER'
   const [tab, setTab] = useState<Tab>('upcoming')
@@ -136,8 +144,15 @@ export default function BookingsScreen() {
   const empty = filtered.reservations.length === 0 && filtered.sessions.length === 0 && missed.length === 0
 
   return (
-    <Screen onRefresh={refetch} refreshing={reservationsQuery.isRefetching || sessionsQuery.isRefetching}>
-      <Title size={28}>Bookings</Title>
+    <Screen
+      floatingTabs
+      onRefresh={refetch}
+      refreshing={reservationsQuery.isRefetching || sessionsQuery.isRefetching}
+    >
+      <View>
+        <Text style={styles.overline}>Driver</Text>
+        <Title>My parking</Title>
+      </View>
       <SegmentedControl
         options={[
           { value: 'upcoming', label: 'Upcoming' },
@@ -156,21 +171,36 @@ export default function BookingsScreen() {
         />
       ) : null}
 
-      {filtered.reservations.map((reservation) => (
-        <Card key={`reservation-${reservation.id}`}>
+      {/* Upcoming: a vertical timeline with a "now" marker. Each booking is a
+          thin row that expands into its actions. */}
+      {filtered.reservations.length > 0 ? (
+        <View style={{ gap: spacing.sm }}>
+          <SectionLabel>{tab === 'past' ? 'Completed' : 'Upcoming & active'}</SectionLabel>
+          {filtered.reservations.map((reservation, index) => (
+          <TimelineRow
+            key={`reservation-${reservation.id}`}
+            isNow={reservation.status === 'ACTIVE'}
+            last={index === filtered.reservations.length - 1}
+          >
+          <View style={styles.timelineRow}>
           <Row between>
-            <Title size={16}>{reservation.siteName ?? reservation.zoneName}</Title>
+            <Text style={styles.historyTitle}>{reservation.siteName ?? reservation.zoneName}</Text>
             <Badge kind="reservation" value={reservation.status} />
           </Row>
-          <Muted>
+          <Mono size={11}>
             {reservation.zoneName} · bay {reservation.assignedSpaceCode ?? 'TBA'} · {reservation.plateNumber}
-          </Muted>
-          <Muted>
-            {formatWhen(reservation.startTime)} → {new Date(reservation.endTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-          </Muted>
-          <Text style={styles.price}>
-            {reservation.estimatedAmount ? `Est. ${formatMoney(reservation.estimatedAmount)}` : 'Free'} · {reservation.code}
-          </Text>
+          </Mono>
+          <Mono size={11} color={colors.textTertiary}>
+            {formatWhen(reservation.startTime)} →{' '}
+            {new Date(reservation.endTime).toLocaleTimeString('en-IN', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </Mono>
+          <Mono size={11} color={colors.textTertiary}>
+            {reservation.estimatedAmount ? `est ${formatMoney(reservation.estimatedAmount)}` : 'free'} ·{' '}
+            {reservation.code}
+          </Mono>
           {reservation.status === 'CONFIRMED' ? (
             <Row>
               <AppButton label="Cancel" variant="outline" style={styles.flex} onPress={() => confirmCancel(reservation)} />
@@ -183,7 +213,7 @@ export default function BookingsScreen() {
             </Row>
           ) : null}
           {reservation.status === 'ACTIVE' ? (
-            <Row>
+            <Row style={{ marginTop: spacing.sm }}>
               <AppButton
                 label={checkOut.isPending ? 'Checking out…' : 'Check out'}
                 style={styles.flex}
@@ -200,34 +230,51 @@ export default function BookingsScreen() {
               ) : null}
             </Row>
           ) : null}
-        </Card>
-      ))}
+          </View>
+          </TimelineRow>
+        ))}
+        </View>
+      ) : null}
 
-      {filtered.sessions.map((session) => (
-        <Card key={`session-${session.id}`}>
-          <Row between>
-            <Title size={16}>{session.siteName ?? session.zoneName}</Title>
-            {session.status === 'ACTIVE' ? (
-              <Badge kind="session" value="ACTIVE" />
-            ) : session.paymentStatus ? (
-              <Badge kind="payment" value={session.paymentStatus} />
-            ) : null}
-          </Row>
-          <Muted>
-            Bay {session.spaceCode ?? '—'} · {session.plateNumber ?? 'vehicle'} · {formatWhen(session.checkInAt)}
-          </Muted>
-          <Row between>
-            <Text style={styles.price}>
-              {session.status === 'ACTIVE' ? 'In progress' : formatDuration(session.durationMinutes)}
-            </Text>
-            <Text style={styles.price}>{session.hourlyRate ? formatMoney(session.amount) : 'Free'}</Text>
-          </Row>
-          {session.paymentStatus === 'PENDING' ? (
-            <AppButton label={`Pay ${formatMoney(session.amount)}`} onPress={() => openPayment(session)} />
-          ) : null}
-          {session.paymentRef ? <Muted>Receipt {session.paymentRef}</Muted> : null}
-        </Card>
-      ))}
+      {/* History: thin rows with mono receipt refs, not a wall of cards. */}
+      {filtered.sessions.length > 0 ? (
+        <View style={{ gap: spacing.sm }}>
+          <SectionLabel>History &amp; receipts</SectionLabel>
+          {filtered.sessions.map((session, index) => (
+            <View key={`session-${session.id}`} style={styles.historyRow}>
+              <Hairline />
+              <Row between>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={styles.historyTitle}>{session.siteName ?? session.zoneName}</Text>
+                  <Mono size={11}>
+                    bay {session.spaceCode ?? '—'} · {session.plateNumber ?? 'vehicle'} ·{' '}
+                    {formatWhen(session.checkInAt)}
+                  </Mono>
+                </View>
+                <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                  <Mono size={12} color={colors.text}>
+                    {session.hourlyRate ? formatMoney(session.amount) : 'Free'}
+                  </Mono>
+                  {session.paymentStatus ? <Badge kind="payment" value={session.paymentStatus} /> : null}
+                </View>
+              </Row>
+              {session.paymentRef ? (
+                <Mono size={10} color={colors.textTertiary}>
+                  ref {session.paymentRef}
+                </Mono>
+              ) : null}
+              {session.paymentStatus === 'PENDING' ? (
+                <AppButton
+                  label={`Pay ${formatMoney(session.amount)}`}
+                  onPress={() => openPayment(session)}
+                  style={{ marginTop: spacing.sm }}
+                />
+              ) : null}
+              {index === filtered.sessions.length - 1 ? <Hairline /> : null}
+            </View>
+          ))}
+        </View>
+      ) : null}
 
       {missed.map((reservation) => (
         <Card key={`missed-${reservation.id}`}>
@@ -252,6 +299,25 @@ export default function BookingsScreen() {
 const useStyles = makeStyles((colors) =>
   StyleSheet.create({
     flex: { flex: 1 },
-    price: { color: colors.text, fontWeight: '700' },
+    overline: {
+      color: colors.textSecondary,
+      fontSize: 11,
+      lineHeight: 14,
+      fontWeight: '600',
+      letterSpacing: 1.3,
+      textTransform: 'uppercase',
+      marginBottom: 4,
+    },
+    price: { color: colors.text, fontWeight: '600' },
+    historyRow: { gap: spacing.sm, paddingVertical: spacing.sm },
+    historyTitle: { color: colors.text, fontSize: 15, fontWeight: '600' },
+    timelineRow: {
+      gap: 2,
+      padding: spacing.md,
+      borderRadius: radius.control,
+      backgroundColor: colors.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.hairline,
+    },
   }),
 )

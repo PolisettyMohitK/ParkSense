@@ -1,5 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy'
-import { VISION_BASE } from './client'
+import { VISION_BASE, getAuthToken } from './client'
 
 export interface UploadFile {
   uri: string
@@ -54,11 +54,13 @@ async function uploadMultipart<T>(
   parameters: Record<string, string>,
 ): Promise<T> {
   const url = `${VISION_BASE}${path}`
+  const token = getAuthToken()
   const response = await FileSystem.uploadAsync(url, file.uri, {
     httpMethod: 'POST',
     uploadType: FileSystem.FileSystemUploadType.MULTIPART,
     fieldName: 'file',
     parameters,
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   })
 
   if (response.status < 200 || response.status >= 300) {

@@ -21,6 +21,47 @@ import { makeStyles, useTheme } from '../theme/ThemeProvider'
 
 type Mode = 'propose' | 'detect'
 
+function parsePolygon(raw?: string | null): number[][] | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed) && parsed.length >= 3 && Array.isArray(parsed[0])) {
+      return parsed as number[][]
+    }
+  } catch {
+    /* stored polygon is not JSON */
+  }
+  return null
+}
+
+/** Prefer the verified bay outline captured at survey time; fall back to its anchor point. */
+function slotsFromSpaces(spaces: { id: number; code?: string | null; active: boolean; polygon?: string | null; positionX?: number | null; positionY?: number | null }[]): DetectSlot[] {
+  const slots: DetectSlot[] = []
+  for (const space of spaces) {
+    if (!space.active) continue
+    const polygon = parsePolygon(space.polygon)
+    if (polygon) {
+      slots.push({ id: space.code ?? `#${space.id}`, space_id: space.id, polygon })
+      continue
+    }
+    if (space.positionX != null && space.positionY != null) {
+      const x = space.positionX
+      const y = space.positionY
+      slots.push({
+        id: space.code ?? `#${space.id}`,
+        space_id: space.id,
+        polygon: [
+          [x, y],
+          [x + 84, y],
+          [x + 84, y + 104],
+          [x, y + 104],
+        ],
+      })
+    }
+  }
+  return slots
+}
+
 export default function CameraScreen() {
   const styles = useStyles()
   const { colors } = useTheme()
@@ -90,22 +131,7 @@ export default function CameraScreen() {
 
   const detectMutation = useMutation({
     mutationFn: () => {
-      const slots: DetectSlot[] = (spacesQuery.data ?? [])
-        .filter((space) => space.active)
-        .map((space) => {
-          const x = space.positionX ?? 0
-          const y = space.positionY ?? 0
-          return {
-            id: space.code ?? `#${space.id}`,
-            space_id: space.id,
-            polygon: [
-              [x, y],
-              [x + 84, y],
-              [x + 84, y + 104],
-              [x, y + 104],
-            ],
-          }
-        })
+      const slots = slotsFromSpaces(spacesQuery.data ?? [])
       if (slots.length === 0) {
         throw new Error('This zone has no positioned spaces')
       }

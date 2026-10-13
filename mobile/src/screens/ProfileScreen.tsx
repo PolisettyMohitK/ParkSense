@@ -2,7 +2,18 @@ import { Alert, StyleSheet, Text, View } from 'react-native'
 import { Pressable } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { AppButton, Badge, Card, Divider, Muted, Row, Screen, Title } from '../components/ui'
+import {
+  AppButton,
+  Badge,
+  Divider,
+  ListRow,
+  ListSection,
+  LiveBadge,
+  Muted,
+  Row,
+  Screen,
+  Title,
+} from '../components/ui'
 import { useAuth } from '../store/AuthContext'
 import { useSocketStatus } from '../hooks/useOccupancyStream'
 import type { RootStackParamList } from '../navigation/types'
@@ -38,7 +49,7 @@ export default function ProfileScreen() {
   }
 
   return (
-    <Screen>
+    <Screen floatingTabs>
       <Row between>
         <View>
           <Title size={24}>{user?.fullName}</Title>
@@ -47,62 +58,39 @@ export default function ProfileScreen() {
         <Badge kind="role" value={user?.role ?? 'USER'} />
       </Row>
 
-      <Card>
-        <Row between>
-          <Muted>Role</Muted>
-          <Text style={styles.value}>{user?.role === 'USER' ? 'Driver' : user?.role === 'ADMIN' ? 'Admin' : 'Manager'}</Text>
-        </Row>
-        <Row between>
-          <Muted>Organization</Muted>
-          <Text style={styles.value}>{user?.organizationName ?? '—'}</Text>
-        </Row>
-        <Row between>
-          <Muted>Realtime</Muted>
-          <Text style={[styles.value, { color: socketConnected ? colors.success : colors.textSecondary }]}>
-            {socketConnected ? 'Connected' : 'Offline'}
-          </Text>
-        </Row>
-      </Card>
+      {/* Two quiet sections plus the payment summary. No cards inside cards. */}
+      <ListSection title="Details">
+        <ListRow label="Role" value={user?.role === 'USER' ? 'Driver' : user?.role === 'ADMIN' ? 'Admin' : 'Manager'} />
+        <ListRow label="Organization" value={user?.organizationName ?? '—'} />
+        <ListRow label="Email" value={user?.email} last />
+      </ListSection>
 
-      <Card>
+      <ListSection title="Account">
         {items.map((item, index) => (
-          <View key={item.label}>
-            {index > 0 ? <Divider /> : null}
-            <Pressable onPress={item.onPress}>
-              <Row between>
-                <Text style={styles.link}>{item.label}</Text>
-                <Text style={styles.chevron}>›</Text>
-              </Row>
-            </Pressable>
-          </View>
+          <ListRow
+            key={item.label}
+            label={item.label}
+            onPress={item.onPress}
+            last={index === items.length - 1}
+          />
         ))}
-      </Card>
+      </ListSection>
 
       {adminItems.length > 0 ? (
-        <Card>
-          <Muted>Administration</Muted>
+        <ListSection title="Administration">
           {adminItems.map((item, index) => (
-            <View key={item.label}>
-              {index > 0 ? <Divider /> : null}
-              <Pressable onPress={item.onPress}>
-                <Row between>
-                  <Text style={styles.link}>{item.label}</Text>
-                  <Text style={styles.chevron}>›</Text>
-                </Row>
-              </Pressable>
-            </View>
+            <ListRow
+              key={item.label}
+              label={item.label}
+              onPress={item.onPress}
+              last={index === adminItems.length - 1}
+            />
           ))}
-        </Card>
+        </ListSection>
       ) : null}
-
-      <Card>
-        <Pressable onPress={() => navigation.navigate('Settings')}>
-          <Row between>
-            <Text style={styles.link}>Settings</Text>
-            <Text style={styles.chevron}>›</Text>
-          </Row>
-        </Pressable>
-      </Card>
+      <ListSection title="Preferences">
+        <ListRow label="Settings" onPress={() => navigation.navigate('Settings')} last />
+      </ListSection>
 
       <AppButton
         label="Sign out"

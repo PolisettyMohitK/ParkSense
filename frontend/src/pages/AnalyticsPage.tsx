@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Alert,
-  Box,
   Button,
   Card,
   CardContent,
@@ -94,8 +93,9 @@ export default function AnalyticsPage() {
     heatmap.find((cell) => cell.dayOfWeek === day && cell.hour === hour)?.events ?? 0
 
   return (
-    <Box>
+    <div>
       <PageHeader
+        overline="Operations"
         title="Analytics"
         subtitle="Live totals across all venues, plus activity trends and peak hours (India Standard Time) for the selected area and period."
         action={
@@ -202,7 +202,7 @@ export default function AnalyticsPage() {
               {utilizationQuery.isLoading ? (
                 <LoadingState minHeight={280} />
               ) : (
-                <Box sx={{ height: 300 }}>
+                <div style={{ height: 300 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={utilizationChart}>
                       <defs>
@@ -242,7 +242,7 @@ export default function AnalyticsPage() {
                       />
                     </AreaChart>
                   </ResponsiveContainer>
-                </Box>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -257,8 +257,8 @@ export default function AnalyticsPage() {
               <Typography variant="caption" color="text.secondary">
                 Events by day of week and hour (UTC). Darker = more activity.
               </Typography>
-              <Box sx={{ overflowX: 'auto', mt: 2 }}>
-                <Box sx={{ minWidth: 760 }}>
+              <div style={heatmapScroll}>
+                <div style={heatmapInner}>
                   <Stack direction="row" spacing={0.5} sx={{ ml: 6, mb: 0.5 }}>
                     {Array.from({ length: 24 }).map((_, hour) => (
                       <Typography
@@ -280,13 +280,13 @@ export default function AnalyticsPage() {
                         const value = cellFor(index + 1, hour)
                         return (
                           <Tooltip key={hour} title={`${day} ${hour}:00 — ${value} events`}>
-                            <Box
-                              sx={{
+                            <div
+                              style={{
                                 width: 26,
                                 height: 26,
-                                borderRadius: 0.75,
-                                bgcolor: heatColor(value, maxHeat, isDark),
-                                border: `1px solid ${theme.palette.divider}`,
+                                borderRadius: 3,
+                                background: heatColor(value, maxHeat, isDark),
+                                border: '1px solid var(--color-hairline)',
                               }}
                             />
                           </Tooltip>
@@ -294,12 +294,15 @@ export default function AnalyticsPage() {
                       })}
                     </Stack>
                   ))}
-                </Box>
-              </Box>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
-    </Box>
+    </div>
   )
 }
+
+const heatmapScroll: import('react').CSSProperties = { overflowX: 'auto', marginTop: 16 }
+const heatmapInner: import('react').CSSProperties = { minWidth: 760 }

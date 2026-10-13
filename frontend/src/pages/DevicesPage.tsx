@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Box,
   Button,
   Chip,
   Dialog,
@@ -117,7 +116,7 @@ export default function DevicesPage() {
   const devices = devicesQuery.data ?? []
 
   return (
-    <Box>
+    <div>
       <PageHeader
         title="Monitoring devices"
         subtitle="Cameras and sensors feeding occupancy events into a zone."
@@ -278,6 +277,6 @@ export default function DevicesPage() {
         </DialogActions>
       </Dialog>
       {confirmDialog}
-    </Box>
+    </div>
   )
 }

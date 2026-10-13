@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Box,
   Button,
   Chip,
   Dialog,
@@ -118,7 +117,7 @@ export default function UsersPage() {
   const users = usersQuery.data ?? []
 
   return (
-    <Box>
+    <div>
       <PageHeader
         title="Users"
         subtitle="Manage accounts, roles and organization membership."
@@ -292,6 +291,6 @@ export default function UsersPage() {
         </DialogActions>
       </Dialog>
       {confirmDialog}
-    </Box>
+    </div>
   )
 }

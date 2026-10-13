@@ -20,10 +20,16 @@ See `docs/architecture/camera-algorithm.md` for the full algorithm.
 ```bash
 python -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/uvicorn app.main:app --port 8001
+JWT_SECRET=<same as backend app.jwt.secret> .venv/bin/uvicorn app.main:app --port 8001
 ```
 
 API docs: `http://localhost:8001/docs`
+
+All endpoints except `/health` require a staff (ADMIN or MANAGER) JWT issued by
+the Java backend, sent as `Authorization: Bearer <token>`. The web player sends
+the signed-in user's token; `JWT_SECRET` must match the backend's
+`app.jwt.secret`, otherwise every request is rejected with 401. Uploads are
+sniffed by magic bytes and capped (see `MAX_UPLOAD_MB`).
 
 ## Test
 
@@ -50,10 +56,14 @@ in the backend), classifies each bay, writes an annotated overlay to
 
 | Variable | Default | Purpose |
 |---|---|---|
+| `JWT_SECRET` | _(empty — required)_ | Must match the backend's `app.jwt.secret`; tokens are verified with it |
+| `VISION_ALLOWED_ORIGINS` | `http://localhost:5173,http://localhost:8081` | Browser origins allowed to call this service |
 | `PARKING_API_URL` | `http://localhost:8080` | Backend base URL |
 | `PARKING_USER` | `manager@parking.dev` | Account used when pushing events |
-| `PARKING_PASSWORD` | `manager123` | Password for that account |
+| `PARKING_PASSWORD` | _(empty — required only for push)_ | Password for that account; there is no built-in default |
 | `CAMERA_CODE` | `CAM-L1` | Device code used in `externalId` |
+| `MAX_UPLOAD_MB` | `10` | Largest accepted upload |
+| `MAX_IMAGE_PIXELS` | `30000000` | Decompression-bomb guard after decoding |
 
 ## Scope
 

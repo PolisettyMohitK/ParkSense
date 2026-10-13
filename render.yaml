@@ -1,0 +1,65 @@
+# Render Blueprint: backend API + vision service.
+#
+# The database lives on Aiven MySQL (see docs/deployment.md). The web app is
+# hosted on Cloudflare Pages, not here.
+#
+# First sync prompts for the `sync: false` values; JWT_SECRET is generated once
+# and shared with the vision service so both verify the same tokens.
+services:
+  - type: web
+    name: parksense-api
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./infrastructure/docker/backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: DB_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://parksense.pages.dev,https://*.parksense.pages.dev
+      - key: APP_TIMEZONE
+        value: Asia/Kolkata
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: APP_SEED_DEMO
+        # Seeds the Hyderabad demo venues + demo logins so reviewers see data. Set to "false" for a clean DB.
+        value: "true"
+
+  - type: web
+    name: parksense-vision
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./infrastructure/docker/vision/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      # Update this if Render assigns the API a different onrender.com name.
+      - key: PARKING_API_URL
+        value: https://parksense-api.onrender.com
+      - key: JWT_SECRET
+        fromService:
+          type: web
+          name: parksense-api
+          envVarKey: JWT_SECRET
+      - key: VISION_ALLOWED_ORIGINS
+        value: https://parksense.pages.dev,https://*.parksense.pages.dev
+      # Optional: only needed when the pipeline pushes events (push=true).
+      - key: PARKING_USER
+        sync: false
+      - key: PARKING_PASSWORD
+        sync: false

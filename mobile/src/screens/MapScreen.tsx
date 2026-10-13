@@ -70,7 +70,7 @@ export default function MapScreen() {
   }
 
   return (
-    <Screen>
+    <Screen floatingTabs>
       <Title size={24}>Live map</Title>
       <Muted>Tap a space to toggle occupancy{canManage ? '' : ' (managers only)'}.</Muted>
 

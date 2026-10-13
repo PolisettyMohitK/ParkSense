@@ -11,6 +11,7 @@ import {
   ErrorState,
   Loading,
   Muted,
+  NumericReadout,
   Row,
   Screen,
   SearchBar,
@@ -134,13 +135,30 @@ export default function ExploreScreen() {
         sessionsQuery.refetch()
       }}
       refreshing={placesQuery.isRefetching}
+      floatingTabs
     >
+      {/* Hero: one line of copy, one live instrument number, one search field. */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerKicker}>Parking near</Text>
-          <Text style={styles.headerTitle}>{location.label}</Text>
+        <View style={{ flex: 1, gap: 6 }}>
+          <Text style={styles.headerKicker}>Parking near you</Text>
+          <View style={styles.headerTitleRow}>
+            <Text style={styles.headerTitle}>{location.label}</Text>
+            <View style={styles.freeReadout}>
+              <NumericReadout
+                value={places.reduce((total, place) => total + place.availableSpaces, 0)}
+                size={15}
+                color={colors.holo}
+              />
+              <Text style={styles.freeSuffix}>bays free</Text>
+            </View>
+          </View>
         </View>
-        <Pressable onPress={() => navigation.navigate('Tabs', { screen: 'Profile' })} style={styles.avatar}>
+        <Pressable
+          onPress={() => navigation.navigate('Tabs', { screen: 'Profile' })}
+          style={styles.avatar}
+          accessibilityRole="button"
+          accessibilityLabel="Your profile"
+        >
           <Text style={styles.avatarText}>{user?.fullName?.charAt(0) ?? '?'}</Text>
         </Pressable>
       </View>
@@ -217,10 +235,18 @@ function PlaceCard({
         <View style={styles.coverWrapper}>
           <PlacePhotoSlideshow photos={place.photoUrls} coverImageUrl={place.coverImageUrl} height={165} autoPlay={false} />
 
-          {/* Minimal translucent frosted capsule for status */}
+          {/* Status capsule: coloured dot + free count, never colour alone. */}
           <View style={styles.spotCapsule}>
+            <View
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: 4,
+                backgroundColor: isFull ? colors.danger : colors.success,
+              }}
+            />
             <Text style={styles.spotCapsuleText}>
-              {isFull ? 'Occupied' : `${place.availableSpaces} spots free`}
+              {isFull ? 'Full' : `${place.availableSpaces} free`}
             </Text>
           </View>
         </View>
@@ -236,21 +262,6 @@ function PlaceCard({
               ? ` · ${formatMoney(Number(place.hourlyRate))}/hr`
               : ' · Free'}
           </Text>
-          <Text style={styles.placeAddress} numberOfLines={1}>
-            {[place.address, place.city].filter(Boolean).join(', ') || 'Hyderabad'}
-          </Text>
-
-          <View style={styles.placeFooter}>
-            <Text style={styles.placeCapacity}>{place.totalSpaces} total bays</Text>
-            <Text
-              style={[
-                styles.placeAvailability,
-                { color: isFull ? colors.textSecondary : colors.text },
-              ]}
-            >
-              {isFull ? 'Currently full' : `${place.availableSpaces} available`}
-            </Text>
-          </View>
         </View>
       </View>
     </Pressable>
@@ -260,73 +271,75 @@ function PlaceCard({
 const useStyles = makeStyles((colors) =>
   StyleSheet.create({
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.sm },
-    headerKicker: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
-    headerTitle: { color: colors.text, fontSize: 24, fontWeight: '700' },
+    headerKicker: {
+      color: colors.textSecondary,
+      fontSize: 11,
+      lineHeight: 14,
+      fontWeight: '600',
+      letterSpacing: 1.3,
+      textTransform: 'uppercase',
+    },
+    headerTitle: { color: colors.text, fontSize: 26, lineHeight: 30, fontWeight: '600', letterSpacing: -0.5 },
+    headerTitleRow: { flexDirection: 'row', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' },
+    freeReadout: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
+    freeSuffix: { color: colors.holo, fontSize: 13 },
     avatar: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      backgroundColor: colors.fill,
+      width: 36,
+      height: 36,
+      borderRadius: 18,
       alignItems: 'center',
       justifyContent: 'center',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.hairlineStrong,
     },
-    avatarText: { color: colors.text, fontWeight: '700', fontSize: 16 },
+    avatarText: { color: colors.text, fontWeight: '600', fontSize: 14 },
     locationHint: { color: colors.textSecondary, fontSize: 12 },
-    liveCard: { backgroundColor: colors.fill, paddingVertical: spacing.md },
+    liveCard: {
+      backgroundColor: colors.glass,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.hairlineStrong,
+      borderRadius: radius.panel,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.lg,
+    },
     liveText: { flex: 1 },
     liveTitle: { color: colors.text, fontWeight: '600' },
     liveSubtitle: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
     chevron: { color: colors.textSecondary, fontSize: 22 },
     placeCard: {
       backgroundColor: colors.surface,
-      borderRadius: radius.card,
+      borderRadius: radius.panel,
       overflow: 'hidden',
       marginBottom: spacing.md,
-      borderWidth: 1,
-      borderColor: colors.separator,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.hairline,
     },
     coverWrapper: {
       width: '100%',
-      height: 165,
+      aspectRatio: 16 / 10,
       position: 'relative',
     },
     spotCapsule: {
       position: 'absolute',
-      bottom: 10,
+      bottom: 12,
       left: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 7,
       paddingHorizontal: 10,
-      paddingVertical: 3.5,
+      paddingVertical: 4,
       borderRadius: radius.pill,
-      backgroundColor: 'rgba(10,12,14,0.72)',
-      borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.16)',
+      backgroundColor: colors.glass,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.hairlineStrong,
     },
     spotCapsuleText: {
-      color: '#FAFAFA',
-      fontWeight: '600',
-      fontSize: 11,
-      letterSpacing: 0.2,
+      color: colors.text,
+      fontWeight: '500',
+      fontSize: 12,
     },
-    placeBody: { padding: spacing.md, gap: 3 },
-    placeName: { color: colors.text, fontSize: 16, fontWeight: '700' },
-    placeMeta: { color: colors.textSecondary, fontSize: 12 },
-    placeAddress: { color: colors.textSecondary, fontSize: 11 },
-    placeFooter: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginTop: spacing.sm,
-      paddingTop: spacing.xs,
-      borderTopWidth: 1,
-      borderTopColor: colors.separator,
-    },
-    placeCapacity: {
-      color: colors.textSecondary,
-      fontSize: 11,
-    },
-    placeAvailability: {
-      fontSize: 11,
-      fontWeight: '600',
-    },
+    placeBody: { padding: spacing.lg, gap: 4 },
+    placeName: { color: colors.text, fontSize: 15, fontWeight: '600', letterSpacing: -0.2 },
+    placeMeta: { color: colors.textSecondary, fontSize: 13 },
   }),
 )

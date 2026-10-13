@@ -65,7 +65,7 @@ export default function ZonesScreen() {
   const zones = zonesQuery.data ?? []
 
   return (
-    <Screen>
+    <Screen floatingTabs>
       <Row between>
         <Title size={24}>Parking zones</Title>
         {canManage ? (

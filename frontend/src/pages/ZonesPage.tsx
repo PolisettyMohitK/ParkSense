@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Box,
   Button,
   Card,
   CardActionArea,
@@ -17,7 +16,6 @@ import {
   MenuItem,
   Stack,
   TextField,
-  Typography,
 } from '@mui/material'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded'
@@ -25,6 +23,7 @@ import EditRoundedIcon from '@mui/icons-material/EditRounded'
 import { useSnackbar } from 'notistack'
 import { motion } from 'framer-motion'
 import PageHeader from '../components/PageHeader'
+import { NumericReadout } from '../components/Stark'
 import EmptyState from '../components/EmptyState'
 import ErrorState from '../components/ErrorState'
 import LoadingState from '../components/LoadingState'
@@ -130,8 +129,9 @@ export default function ZonesPage() {
   const zones = zonesQuery.data ?? []
 
   return (
-    <Box>
+    <div>
       <PageHeader
+        overline="Operations"
         title="Parking zones"
         subtitle="Structured bays and image-mapped areas across your sites."
         action={
@@ -175,12 +175,7 @@ export default function ZonesPage() {
                     <CardActionArea onClick={() => navigate(`/zones/${zone.id}`)}>
                       <CardContent>
                         <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-                          <Box>
-                            <Typography variant="h6">{zone.name}</Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {zone.siteName} · {zone.code}
-                            </Typography>
-                          </Box>
+                          <ZoneIdentity zone={zone} />
                           <Chip
                             size="small"
                             label={zone.type === 'STRUCTURED' ? 'Structured' : 'Unstructured'}
@@ -189,32 +184,7 @@ export default function ZonesPage() {
                           />
                         </Stack>
 
-                        <Stack direction="row" spacing={3} sx={{ mt: 2 }}>
-                          <Box>
-                            <Typography variant="h5" fontWeight={700}>
-                              {zone.totalSpaces}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              spaces
-                            </Typography>
-                          </Box>
-                          <Box>
-                            <Typography variant="h5" fontWeight={700} color="error.main">
-                              {zone.occupiedSpaces}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              occupied
-                            </Typography>
-                          </Box>
-                          <Box>
-                            <Typography variant="h5" fontWeight={700} color="success.main">
-                              {zone.availableSpaces}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              available
-                            </Typography>
-                          </Box>
-                        </Stack>
+                        <ZoneCounts zone={zone} />
 
                         <LinearProgress
                           variant="determinate"
@@ -353,6 +323,36 @@ export default function ZonesPage() {
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
         onClose={() => setDeleteTarget(null)}
       />
-    </Box>
+    </div>
+  )
+}
+
+function ZoneIdentity({ zone }: { zone: ParkingZone }) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em' }}>{zone.name}</div>
+      <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+        {zone.siteName} · {zone.code}
+      </div>
+    </div>
+  )
+}
+
+function ZoneCounts({ zone }: { zone: ParkingZone }) {
+  return (
+    <Stack direction="row" spacing={3} sx={{ mt: 2 }}>
+      <ZoneCount label="spaces" value={zone.totalSpaces} />
+      <ZoneCount label="occupied" value={zone.occupiedSpaces} tint="var(--color-status-occupied)" />
+      <ZoneCount label="available" value={zone.availableSpaces} tint="var(--color-status-free)" />
+    </Stack>
+  )
+}
+
+function ZoneCount({ label, value, tint }: { label: string; value: number; tint?: string }) {
+  return (
+    <div>
+      <NumericReadout value={value} size={22} color={tint} />
+      <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{label}</div>
+    </div>
   )
 }

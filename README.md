@@ -25,7 +25,9 @@ Mobile (Expo / RN) ───┘                      ▲
 - Append-only occupancy events from multiple sources; derived space status
 - Parking **sessions** (real stays) auto-opened and closed from occupancy, with duration
 - Real-time updates over WebSocket (dashboards and map refresh live)
-- Reservations with optional/auto space assignment and overlap protection
+- Reservations with optional/auto space assignment, overlap protection, a price quote,
+  driver self check-in/check-out, automatic no-show expiry, and simulated payment
+  (sessions settle by card/UPI/wallet/cash)
 - **Camera pipeline**: slot proposal (painted-line detection or grid) and occupancy
   detection (reference difference or texture), with idempotent event ingestion
 - **In-app camera page** (ADMIN/MANAGER): upload a lot photo, preview proposed slots
@@ -39,24 +41,27 @@ Mobile (Expo / RN) ───┘                      ▲
   `/explore`
 - **Apple-style light & dark themes** on mobile and web, following the system setting with
   a manual override
-- Demo seed data in dev (including 8 fictional venues around MG Road, Bengaluru)
+- Demo seed data in dev (fictional venues across Hyderabad: Jubilee Hills, Inorbit
+  Mall Cyberabad, Sarath City Capital Mall, and more)
 
 ## Quick start (development)
 
 Prerequisites: JDK 21, Maven, Node 18+, Docker.
 
-1. **Database**
+1. **Secrets**: `cp .env.example .env` (used by Docker Compose; edit the values as needed).
+2. **Database**
    ```bash
    docker compose up -d mysql
    ```
-2. **Backend**
+3. **Backend** (must run on JDK 21 — Lombok does not support newer JDKs)
    ```bash
    cd backend
-   JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn spring-boot:run
+   JAVA_HOME=$(/usr/libexec/java_home -v 21) mvn spring-boot:run   # macOS
+   # Homebrew JDK: export JAVA_HOME=$(brew --prefix openjdk@21)/libexec/openjdk.jdk/Contents/Home
    ```
    Runs on `http://localhost:8080` (profile `dev`), seeds demo data, Swagger at
    `/swagger-ui.html`.
-3. **Frontend**
+4. **Frontend**
    ```bash
    cd frontend
    npm install
@@ -64,12 +69,15 @@ Prerequisites: JDK 21, Maven, Node 18+, Docker.
    ```
    Runs on `http://localhost:5173` and proxies `/api` + `/ws` to the backend.
 
-4. **Vision service (optional — camera algorithm)**
+5. **Vision service (optional — camera algorithm)**
    ```bash
    cd vision-service
    python -m venv .venv && .venv/bin/pip install -r requirements.txt
-   .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8001
+   JWT_SECRET=change-me-dev-secret-please-rotate-in-production-0123456789 \
+     PARKING_PASSWORD=manager123 \
+     .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8001
    ```
+   `JWT_SECRET` must match the backend's (`app.jwt.secret` in the active profile).
    `--host 0.0.0.0` lets the mobile app reach it over your LAN. Then, with the
    backend running:
    ```bash
@@ -77,7 +85,7 @@ Prerequisites: JDK 21, Maven, Node 18+, Docker.
    ```
    See `docs/architecture/camera-algorithm.md`.
 
-5. **Mobile app (Expo Go)**
+6. **Mobile app (Expo Go)**
    ```bash
    cd mobile
    npm install
@@ -118,13 +126,19 @@ lsof -nP -iTCP:3306 -sTCP:LISTEN
 ## Production (Docker)
 
 ```bash
+cp .env.example .env   # once; secrets live here, not in the compose file
 docker compose up --build
 ```
-- Frontend: `http://localhost:8081` (nginx; proxies `/api` and `/ws`)
-- Backend: `http://localhost:8080`, profile `prod` (env-driven config)
+- Frontend: `http://localhost:8081` (nginx; proxies `/api`, `/ws` and `/vision`)
+- Backend: `http://localhost:8080`, profile `prod` (env-driven config, Flyway migrations)
+- Vision: `http://localhost:8001`
+
+For the hosted setup (Aiven MySQL + Render + Cloudflare Pages), see
+`docs/deployment.md`.
 
 ## Documentation
 
+- `docs/deployment.md` — Aiven + Render + Cloudflare Pages deployment
 - `docs/architecture/system-architecture.md`
 - `docs/architecture/camera-algorithm.md` — slot proposal + occupancy detection
 - `docs/database/er-diagram.md`

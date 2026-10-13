@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Box,
   Button,
   Chip,
   Dialog,
@@ -100,7 +99,7 @@ export default function OrganizationsPage() {
   const orgs = orgsQuery.data ?? []
 
   return (
-    <Box>
+    <div>
       <PageHeader
         title="Organizations"
         subtitle="Top-level tenants owning sites, zones and users."
@@ -224,6 +223,6 @@ export default function OrganizationsPage() {
         </DialogActions>
       </Dialog>
       {confirmDialog}
-    </Box>
+    </div>
   )
 }

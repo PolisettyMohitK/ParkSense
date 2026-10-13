@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Box,
   Button,
   Card,
   CardContent,
@@ -85,8 +84,9 @@ export default function ReservationsPage() {
   }, [searchParams, setSearchParams])
 
   return (
-    <Box>
+    <div>
       <PageHeader
+        overline={isDriver ? undefined : 'Operations'}
         title={isDriver ? 'My parking' : 'Reservations'}
         subtitle={
           isDriver
@@ -121,7 +121,7 @@ export default function ReservationsPage() {
         onClose={() => setBookingTarget(null)}
         onBooked={() => setTab('reservations')}
       />
-    </Box>
+    </div>
   )
 }
 
@@ -168,14 +168,7 @@ function DriverBookings({ onBook }: { onBook: () => void }) {
         <CardContent>
           <Stack spacing={1.5}>
             <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
-              <Box sx={{ minWidth: 0 }}>
-                <Typography fontWeight={700} noWrap>
-                  {reservation.siteName ?? reservation.zoneName}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {reservation.zoneName} · bay {reservation.assignedSpaceCode ?? 'TBA'} · {reservation.plateNumber}
-                </Typography>
-              </Box>
+              <ReservationIdentity reservation={reservation} />
               <StatusChip kind="reservation" value={reservation.status} />
             </Stack>
             <Typography variant="body2">{windowLabel(reservation)}</Typography>
@@ -243,10 +236,7 @@ function DriverBookings({ onBook }: { onBook: () => void }) {
 
   return (
     <Stack spacing={3}>
-      <Box>
-        <Typography variant="overline" color="text.secondary">
-          Upcoming & active
-        </Typography>
+      <SectionBlock label="Upcoming & active" count={upcoming.length}>
         {upcoming.length === 0 ? (
           <EmptyState title="Nothing upcoming" subtitle="Your next booking will appear here." action={{ label: 'Book parking', onClick: onBook }} />
         ) : (
@@ -254,17 +244,14 @@ function DriverBookings({ onBook }: { onBook: () => void }) {
             {upcoming.map(renderCard)}
           </Grid>
         )}
-      </Box>
-      {past.length > 0 && (
-        <Box>
-          <Typography variant="overline" color="text.secondary">
-            Past
-          </Typography>
+      </SectionBlock>
+      {past.length > 0 ? (
+        <SectionBlock label="Past" count={past.length}>
           <Grid container spacing={2}>
             {past.map(renderCard)}
           </Grid>
-        </Box>
-      )}
+        </SectionBlock>
+      ) : null}
       {confirmDialog}
       {paymentDialog}
     </Stack>
@@ -575,4 +562,60 @@ function StaffSessions() {
       />
     </>
   )
+}
+
+/** Overline + mono count, with no card. Separation is hairlines, not boxes. */
+function SectionBlock({ label, count, children }: { label: string; count: number; children: React.ReactNode }) {
+  return (
+    <section>
+      <div style={sectionHead}>
+        <span style={sectionLabel}>{label}</span>
+        <span style={sectionCount}>{count}</span>
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function ReservationIdentity({ reservation }: { reservation: Reservation }) {
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div
+        style={{
+          fontWeight: 700,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {reservation.siteName ?? reservation.zoneName}
+      </div>
+      <div style={{ fontSize: 15, lineHeight: 1.47, color: 'var(--color-text-secondary)' }}>
+        {reservation.zoneName} · bay{' '}
+        <span style={{ fontFamily: 'var(--font-mono)' }}>{reservation.assignedSpaceCode ?? 'TBA'}</span> ·{' '}
+        <span style={{ fontFamily: 'var(--font-mono)' }}>{reservation.plateNumber}</span>
+      </div>
+    </div>
+  )
+}
+
+const sectionHead: import('react').CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  marginBottom: 12,
+}
+
+const sectionLabel: import('react').CSSProperties = {
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase',
+  color: 'var(--color-text-secondary)',
+}
+
+const sectionCount: import('react').CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 12,
+  color: 'var(--color-text-tertiary)',
 }

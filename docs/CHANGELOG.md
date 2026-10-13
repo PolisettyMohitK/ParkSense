@@ -739,3 +739,90 @@ assessment and an automatic parking layout. CPU-only, no GPU or ML models requir
 ### Verified
 - `mvn test` → **29 passed**; `pytest` → **22 passed** (51 total).
 - Backend boots and Hibernate creates the `site_surveys` table.
+
+---
+
+## 2026-10-11 — Phase 26: Production readiness (backend / web / mobile / vision audits)
+
+Three parallel audits (backend correctness & security, web UX & tooling,
+mobile/vision/infra) turned into one branch: `feat/production-readiness`.
+
+### Fixed — backend (correctness + security)
+- **Bookings**: `ReservationService` is time-window aware (holds, arrival grace,
+  no-show expiry), uses row locks so concurrent creates cannot overbook, never
+  attaches an early arrival to a future booking, and releases/driver-scopes
+  correctly. Cancelling an arrived booking returns `409`.
+- **Ownership**: users can no longer read or mutate each other's reservations,
+  vehicles, sessions or profiles; staff endpoints are role-gated and verified by
+  `RoleAccessTest`.
+- **Error handling**: bad input now returns `400`/`409` with `ApiErrorResponse`
+  instead of `500`; editing a site no longer wipes price or photos.
+- **Lifecycle**: added `POST /api/reservations/{id}/check-in` and `/check-out`
+  (driver self-service), simulated settlement (`POST /api/me/sessions/{id}/pay`,
+  `POST /api/sessions/{id}/pay`), and price quotes
+  (`GET /api/places/{siteId}/quote`).
+- **Profile**: `GET/PUT /api/me` and `POST /api/me/password`.
+- Dev-only demo seeding behind `app.seed.demo`; first admin via
+  `ADMIN_EMAIL`/`ADMIN_PASSWORD` (`BootstrapAdminRunner`).
+- `V1__baseline.sql` Flyway baseline for prod (`ddl-auto=validate`); H2 stays the
+  test default.
+- Tests: **35 → 60** (H2), plus `MigrationTest` running the baseline against real
+  MySQL (skipped when `MIGRATION_TEST_DB_URL` is unset).
+
+### Fixed — web
+- Driver flow completed end-to-end: Explore → bay selection → booking with price
+  estimate → check-in → check-out → payment receipt; `/api/me` profile page with
+  password change and payment history.
+- Booking/payment/active-stay components extracted; staff pages gated by role
+  (drivers redirected); 404 page; delete confirmations and error states across
+  admin CRUD; survey re-layout persists a new revision.
+- Tooling: ESLint + Vitest (21 tests), three.js and Recharts split out of the
+  main bundle (**~809 KB → ~161 KB** initial download), Cloudflare Pages
+  `_redirects`/`_headers`.
+- **Bug found**: `tsc -b` emitted `vite.config.js` next to `vite.config.ts`, and
+  Vite prefers the stale `.js` — every config change was silently shadowed.
+  Both files are now ignored/removed.
+- **Bug found**: the demo booking was seeded for "now" on the demo driver's only
+  vehicle, so the demo driver could never book; moved to tomorrow.
+
+### Mobile
+- API layer updated to the new contracts; JWT on the vision uploads; expired
+  logins clear secure storage; lock screen re-locks after backgrounding.
+- Sessions are own-only with a payment sheet; booking keeps the chosen bay and
+  shows a live quote; new Register and Account screens.
+- Occupancy notification preference is restored at app start; camera detection
+  uses stored bay polygons when present.
+- Branded icon/splash/adaptive/monochrome assets replace the Expo template
+  defaults; `app.json` declares Face ID, location and camera/photo permission
+  strings; template LICENSE removed.
+
+### Vision service
+- All endpoints except `/health` now require a staff (ADMIN/MANAGER) JWT signed
+  with the backend's `JWT_SECRET` (header or `access_token` for artifact URLs).
+- CORS restricted to `VISION_ALLOWED_ORIGINS`; uploads are magic-byte sniffed,
+  size-capped (`MAX_UPLOAD_MB`) and pixel-capped (decompression bombs).
+- Hardcoded bridge password removed (`PARKING_PASSWORD` required only for push).
+- Tests: **27 → 31** (auth matrix, non-image and oversized uploads).
+
+### Deployment + CI
+- `render.yaml` Blueprint: `parksense-api` + `parksense-vision` (Docker, health
+  checks, shared generated `JWT_SECRET`).
+- Hardened Dockerfiles: non-root users, healthchecks, `MaxRAMPercentage` JVM
+  flags for the 512 MB free tier.
+- `docker-compose.yml` reads all secrets from `.env` (new `.env.example`).
+- Keep-alive workflow pings both Render health endpoints every 10 minutes.
+- GitHub Actions CI: backend tests + MySQL migration test, web lint/test/build,
+  mobile type-check, vision pytest.
+- `docs/deployment.md`: Aiven → Render → Cloudflare Pages walkthrough with
+  verification commands and troubleshooting.
+
+### Verified
+- `mvn test` → **61 run, 0 failures, 1 skipped** (migration test, no
+  `MIGRATION_TEST_DB_URL` locally); with the env vars set it ran Flyway against
+  the local MySQL 8 and Hibernate validated the schema.
+- Browser: full driver flow against the dev backend; staff dashboard, role
+  gating and the profile page checked; realtime WebSocket connected.
+- Vision: `pytest` → **31 passed**. Web: ESLint clean, Vitest 21 passed, build
+  clean. Mobile: `tsc --noEmit` clean (not yet run on a device).
+- Not verified: hosted Render/Pages/Aiven deploys (needs the accounts) and a
+  physical-device mobile build.

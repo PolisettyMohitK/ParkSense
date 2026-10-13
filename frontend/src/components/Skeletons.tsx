@@ -1,69 +1,117 @@
-import { Box, Card, Grid, Skeleton, Stack } from '@mui/material'
+import type { CSSProperties } from 'react'
+import { Skeleton, Stack, useTheme } from '@mui/material'
+import type { Theme } from '@mui/material/styles'
+import { radius } from '../theme'
+
+/** Shared shimmer block. Never a spinner for content. */
+function Slab({
+  width,
+  height,
+  corner,
+}: {
+  width?: number | string
+  height?: number | string
+  corner?: number
+}) {
+  const theme = useTheme()
+  return (
+    <Skeleton
+      variant="rounded"
+      animation="wave"
+      width={width}
+      height={height}
+      sx={{ borderRadius: corner ?? radius.chip, bgcolor: theme.stark.hairline }}
+    />
+  )
+}
+
+/** Quiet line placeholder. */
+export function TextSkeleton({ width = '100%', height = 14 }: { width?: number | string; height?: number }) {
+  return <Slab width={width} height={height} />
+}
 
 export function PlaceCardSkeleton() {
   return (
-    <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Skeleton variant="rectangular" height={160} animation="wave" />
-      <Box sx={{ p: 2, flexGrow: 1 }}>
-        <Stack spacing={1}>
-          <Skeleton variant="text" width="60%" height={28} animation="wave" />
-          <Skeleton variant="text" width="85%" height={20} animation="wave" />
-          <Skeleton variant="text" width="40%" height={18} animation="wave" />
-          <Box sx={{ pt: 1, display: 'flex', gap: 1 }}>
-            <Skeleton variant="rounded" width={60} height={24} animation="wave" />
-            <Skeleton variant="rounded" width={70} height={24} animation="wave" />
-          </Box>
-        </Stack>
-      </Box>
-    </Card>
+    <div style={skeletonCard}>
+      <Slab width="100%" height="100%" corner={0} />
+    </div>
+  )
+}
+
+export function PlaceGridSkeleton({ count = 6 }: { count?: number }) {
+  return (
+    <div style={grid}>
+      {Array.from({ length: count }, (_, index) => (
+        <PlaceCardSkeleton key={index} />
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Reserves the HoloLot's exact footprint so the page never shifts when the 3D
+ * chunk resolves.
+ */
+export function HoloLotSkeleton({ height = 420 }: { height?: number }) {
+  return (
+    <div style={{ ...holoSkeleton, height }}>
+      <Slab width="100%" height="100%" corner={0} />
+    </div>
   )
 }
 
 export function PlaceDetailSkeleton() {
   return (
-    <Box sx={{ width: '100%' }}>
-      <Skeleton variant="rounded" width={140} height={36} sx={{ mb: 2 }} animation="wave" />
-      <Card sx={{ mb: 3 }}>
-        <Skeleton variant="rectangular" height={260} animation="wave" />
-        <Box sx={{ p: { xs: 2, md: 3 } }}>
-          <Stack spacing={1.5}>
-            <Skeleton variant="text" width="50%" height={40} animation="wave" />
-            <Skeleton variant="text" width="70%" height={24} animation="wave" />
-            <Stack direction="row" spacing={2} sx={{ pt: 1 }}>
-              <Skeleton variant="text" width={100} height={20} animation="wave" />
-              <Skeleton variant="text" width={80} height={20} animation="wave" />
-              <Skeleton variant="text" width={120} height={20} animation="wave" />
-            </Stack>
-            <Stack direction="row" spacing={1} sx={{ pt: 1 }}>
-              <Skeleton variant="rounded" width={80} height={28} animation="wave" />
-              <Skeleton variant="rounded" width={90} height={28} animation="wave" />
-            </Stack>
-          </Stack>
-        </Box>
-      </Card>
-
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={8}>
-          <Card sx={{ p: 2.5 }}>
-            <Skeleton variant="text" width={140} height={28} sx={{ mb: 2 }} animation="wave" />
-            <Stack spacing={1.5}>
-              <Skeleton variant="rounded" height={60} animation="wave" />
-              <Skeleton variant="rounded" height={60} animation="wave" />
-              <Skeleton variant="rounded" height={60} animation="wave" />
-            </Stack>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <Card sx={{ p: 2.5 }}>
-            <Skeleton variant="text" width={160} height={28} sx={{ mb: 2 }} animation="wave" />
-            <Stack spacing={1.5}>
-              <Skeleton variant="rounded" height={48} animation="wave" />
-              <Skeleton variant="rounded" height={48} animation="wave" />
-              <Skeleton variant="rounded" height={48} animation="wave" />
-            </Stack>
-          </Card>
-        </Grid>
-      </Grid>
-    </Box>
+    <div>
+      <HoloLotSkeleton height={440} />
+      <Stack spacing={1.5} sx={{ mt: 3 }}>
+        <Slab width={120} height={11} />
+        <Slab width="46%" height={30} />
+        <Slab width="30%" height={16} />
+      </Stack>
+    </div>
   )
 }
+
+/** Generic page-level placeholder used by Suspense fallbacks. */
+export function PageSkeleton({ rows = 4 }: { rows?: number }) {
+  const theme = useTheme()
+  return (
+    <Stack spacing={2}>
+      <Slab width={140} height={11} />
+      <Slab width="38%" height={28} />
+      {Array.from({ length: rows }, (_, index) => (
+        <div key={index} style={panel(theme)}>
+          <Slab width="34%" height={12} />
+        </div>
+      ))}
+    </Stack>
+  )
+}
+
+const grid: CSSProperties = {
+  display: 'grid',
+  gap: 24,
+  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+}
+
+const skeletonCard: CSSProperties = {
+  aspectRatio: '16 / 13.5',
+  border: '1px solid var(--color-hairline)',
+  borderRadius: 'var(--radius-panel)',
+  overflow: 'hidden',
+}
+
+const holoSkeleton: CSSProperties = {
+  position: 'relative',
+  borderRadius: 'var(--radius-panel)',
+  border: '1px solid var(--color-hairline)',
+  overflow: 'hidden',
+}
+
+const panel = (theme: Theme): CSSProperties => ({
+  padding: 20,
+  border: `1px solid ${theme.stark.hairline}`,
+  borderRadius: radius.panel,
+  backgroundColor: theme.stark.surface,
+})

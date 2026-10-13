@@ -14,7 +14,7 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     env:
-      API_URL: ${{ vars.API_URL || 'https://parksense-api.onrender.com' }}
+      API_URL: ${{ vars.API_URL || 'https://parksense-api-qctw.onrender.com' }}
       VISION_URL: ${{ vars.VISION_URL || 'https://parksense-vision.onrender.com' }}
     steps:
       - name: Ping health endpoints

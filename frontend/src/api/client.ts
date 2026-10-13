@@ -10,7 +10,7 @@ export const API_BASE_URL: string = import.meta.env.VITE_API_URL ?? '/api'
 
 /**
  * Origin that serves the API, websocket and bundled venue photos. Empty when the API is same-origin
- * (dev proxy / nginx), otherwise e.g. `https://parksense-api.onrender.com`.
+ * (dev proxy / nginx), otherwise e.g. `https://parksense-api-qctw.onrender.com`.
  */
 export const API_ORIGIN: string = /^https?:\/\//.test(API_BASE_URL) ? new URL(API_BASE_URL).origin : ''
 

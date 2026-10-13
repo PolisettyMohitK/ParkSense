@@ -50,7 +50,7 @@ services:
     envVars:
       # Update this if Render assigns the API a different onrender.com name.
       - key: PARKING_API_URL
-        value: https://parksense-api.onrender.com
+        value: https://parksense-api-qctw.onrender.com
       - key: JWT_SECRET
         fromService:
           type: web

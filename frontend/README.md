@@ -24,7 +24,7 @@ npm run dev        # http://localhost:5173, proxies /api, /ws and /vision
 `.env.example` documents the two optional overrides:
 
 ```
-VITE_API_URL=https://parksense-api.onrender.com/api
+VITE_API_URL=https://parksense-api-qctw.onrender.com/api
 VITE_VISION_URL=https://parksense-vision.onrender.com
 ```
 

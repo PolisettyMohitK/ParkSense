@@ -91,7 +91,7 @@ repository root.
 
    | Variable | Value |
    |---|---|
-   | `VITE_API_URL` | `https://parksense-api.onrender.com/api` |
+   | `VITE_API_URL` | `https://parksense-api-qctw.onrender.com/api` |
    | `VITE_VISION_URL` | `https://parksense-vision.onrender.com` |
 
 4. Save and deploy. `frontend/public/_redirects` is copied into `dist`, so
@@ -106,7 +106,7 @@ The Expo app reads its endpoints from `EXPO_PUBLIC_*` variables:
 
 ```bash
 cd mobile
-EXPO_PUBLIC_API_URL=https://parksense-api.onrender.com \
+EXPO_PUBLIC_API_URL=https://parksense-api-qctw.onrender.com \
 EXPO_PUBLIC_VISION_URL=https://parksense-vision.onrender.com \
 npx expo start
 ```
@@ -130,7 +130,7 @@ the API health endpoint every 10 minutes. The vision service is intentionally le
 ## 6. Verify the deployment
 
 ```bash
-API=https://parksense-api.onrender.com
+API=https://parksense-api-qctw.onrender.com
 VISION=https://parksense-vision.onrender.com
 WEB=https://parksense.pages.dev
 

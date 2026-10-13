@@ -78,7 +78,7 @@ npm start                 # then press i / a, or scan with Expo Go
 Point the build at the hosted backend and vision service:
 
 ```bash
-EXPO_PUBLIC_API_URL=https://parksense-api.onrender.com \
+EXPO_PUBLIC_API_URL=https://parksense-api-qctw.onrender.com \
 EXPO_PUBLIC_VISION_URL=https://parksense-vision.onrender.com \
 npx eas build --profile preview
 ```
